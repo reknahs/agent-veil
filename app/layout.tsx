@@ -4,8 +4,8 @@ import { ConvexClientProvider } from "./ConvexClientProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Security Cartographer",
-  description: "Live attack graph & breach feed",
+  title: "AgentVeil",
+  description: "Automate feature delivery with your community",
 };
 
 export default function RootLayout({
