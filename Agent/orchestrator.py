@@ -60,14 +60,26 @@ async def run_round(
     )
 
 
+def _is_error_report(r: ErrorReport) -> bool:
+    """True if this report represents a finding (error/failure)."""
+    return (
+        bool(r.error_summary)
+        or r.status != "finished"
+        or r.is_success is False
+        or r.judge_verdict is False
+    )
+
+
 async def run_gan_loop(
     config: Config,
     site_description: str | None = None,
     on_round_complete: Callable[[RoundResult], Awaitable[None]] | None = None,
+    on_error_report: Callable[[ErrorReport], Awaitable[None]] | None = None,
 ) -> list[RoundResult]:
     """
     Run multiple GAN rounds. After each round, feedback (errors found) is passed
     to the generator for the next round to produce more targeted workflows.
+    If on_error_report is set, it is called for each error report as soon as it's available.
     Uses config.site_description when site_description is not provided.
     """
     site_description = site_description or config.site_description
@@ -82,6 +94,10 @@ async def run_gan_loop(
             feedback=feedback,
         )
         results.append(round_result)
+        if on_error_report:
+            for report in round_result.reports:
+                if _is_error_report(report):
+                    await on_error_report(report)
         if on_round_complete:
             await on_round_complete(round_result)
         # Feed errors back to generator for next round

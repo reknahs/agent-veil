@@ -1,54 +1,24 @@
-# MVP — 3-Person Architecture
+# MVP — Current Architecture
 
-## Current Status
+## Cartographer (Dashboard)
 
-### Cartographer (Live Graph & Dashboard) — DONE
-- **components/AttackGraph.tsx** — React Force Graph, nodes turn red on breach
-- **components/BreachFeed.tsx** — Live breach/log feed
-- **convex/schema.ts** — breaches, logs, pr_status
-- **convex/actions.ts** — launchAttack (demo), rebuildSecurity (calls fixer)
-- **convex/httpActions.ts** — POST /api/log, POST /api/breach, GET /api/breaches
-- **app/dashboard/page.tsx** — Launch Attack, Rebuild Security
+- **app/dashboard/page.tsx** — Website URL + GitHub repo inputs, **Analyze** button. Calls agent API (direct or via Next.js proxy). Displays findings as cards (title, summary, expandable details).
+- **app/api/run-scan/route.ts** — Proxies `POST /api/run-scan` to the agent (avoids CORS).
+- **app/api/run-scan/stream/route.ts** — Proxies `POST /api/run-scan/stream` for SSE streaming.
+- **components/SecurityHeroGraphic.tsx** — Landing page hero.
 
-### Person 3: Architect (Fixer & Sandbox) — DONE
-- **fixer/repo_mapper.py** — Route → file path mapping
-- **fixer/patch_engine.py** — Gemini 2.0 Flash for fixes
-- **fixer/github_bot.py** — Branch, commit, open PR with evidence
-- **fixer/sandbox_verify.py** — Daytona sandbox verification (optional)
-- **fixer/api.py** — FastAPI: `POST /rebuild` runs pipeline
+## Agent (GAN-like tester)
 
----
+- **agent/api.py** — FastAPI: `POST /run-scan` (returns all at end), `POST /run-scan/stream` (SSE). Reads `.env` from agent dir.
+- **agent/orchestrator.py** — Generator (Minimax) + Discriminator (Browser Use), optional `on_error_report` for streaming.
+- **agent/config.py**, **agent/generator.py**, **agent/discriminator.py**, **agent/schemas.py** — Config, workflow generation, browser runs, data shapes.
 
-## How to Run
+## Fixer (optional, not in UI)
 
-### 1. Convex + Next.js (required)
+- **fixer/api.py** — FastAPI: rebuild/fix pipeline.
+- **fixer/github_bot.py**, **fixer/patch_engine.py**, **fixer/repo_mapper.py**, **fixer/sandbox_verify.py** — GitHub PR, patches, routing, sandbox.
 
-```bash
-# Terminal 1: Convex dev
-npx convex dev
+## How to run
 
-# Terminal 2: Next.js
-npm run dev
-```
-
-Set `.env.local`:
-```
-NEXT_PUBLIC_CONVEX_URL=https://YOUR-DEPLOYMENT.convex.cloud
-```
-
-### 2. Fixer API (optional — for real PRs)
-
-```bash
-pip install -r fixer/requirements.txt
-# Set: GITHUB_TOKEN, GEMINI_API_KEY, CONVEX_SITE_URL
-python -m fixer.api
-```
-
-Set Convex env `FIXER_API_URL=http://your-fixer-host:8001` so "Rebuild Security" creates real PRs.
-
----
-
-## Flow
-
-1. **Launch Attack** — Inserts sample breaches/logs → graph nodes turn red, feed updates.
-2. **Rebuild Security** — Convex action fetches breaches → POSTs to fixer → fixer runs repo_mapper → patch_engine → github_bot → PR created.
+1. Start agent: `cd agent && .venv/bin/python -m api` (port 8002).
+2. Start Next: `npm run dev` (port 3000). Use `/dashboard` to analyze.

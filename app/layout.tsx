@@ -1,7 +1,6 @@
 import React from "react";
 import type { Metadata } from "next";
 import { Inter, Poppins } from "next/font/google";
-import { ConvexClientProvider } from "./ConvexClientProvider";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -24,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={poppins.variable}>
       <body className={inter.className}>
-        <ConvexClientProvider>{children}</ConvexClientProvider>
+        {children}
       </body>
     </html>
   );

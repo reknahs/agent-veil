@@ -1,27 +1,32 @@
 # Setup Guide
 
-## Fix "ArgumentValidationError: Object contains extra field 'target_url'"
+## Run the app
 
-Your Convex deployment may be out of sync. Push the latest schema:
+1. **Agent API** (analyzes website + repo, returns findings):
+   ```bash
+   cd agent
+   python3 -m venv .venv
+   source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+   pip install -r requirements.txt
+   cp .env.example .env        # then add BROWSER_USE_API_KEY, MINIMAX_API_KEY, MINIMAX_GROUP_ID
+   python -m api
+   ```
+   Agent runs at `http://localhost:8002`.
 
-```bash
-npx convex dev
-```
+2. **Next.js dashboard** (UI that calls the agent):
+   ```bash
+   npm install
+   npm run dev
+   ```
+   Open `http://localhost:3000/dashboard`. Enter a website URL and optional GitHub repo, then click **Analyze**. Findings appear as cards (optionally streamed).
 
-Leave this running in a separate terminal. It syncs your Convex functions and schema.
+3. **Optional:** Set `AGENT_API_URL` or `NEXT_PUBLIC_AGENT_API_URL` (e.g. in `.env.local`) if the agent is not at `http://localhost:8002`.
 
----
+## Fixer (optional)
 
-## API Keys
+For “Rebuild Security” / real GitHub PRs (not wired in the current UI):
 
-| Feature | API Keys | Where |
-|---------|----------|-------|
-| **Demo mode** | None | Works out of the box |
-| **Rebuild Security (real PRs)** | `GITHUB_TOKEN`, `GEMINI_API_KEY` | Set in fixer env when running `python -m fixer.api` |
-
-### For Real Fixer (Rebuild Security → actual GitHub PR)
-1. Create a [GitHub Personal Access Token](https://github.com/settings/tokens) with `repo` scope
-2. Get a [Gemini API key](https://ai.google.dev/)
-3. Run the fixer: `GITHUB_TOKEN=ghp_xxx GEMINI_API_KEY=xxx python -m fixer.api`
-4. Set in Convex dashboard: `FIXER_API_URL=http://localhost:8001`
-5. Enter the GitHub repo in the dashboard (e.g. `jayadevgh/jayadevgh.github.io`) before clicking Rebuild Security
+- Create a [GitHub Personal Access Token](https://github.com/settings/tokens) with `repo` scope
+- Get a [Gemini API key](https://ai.google.dev/)
+- Run: `GITHUB_TOKEN=... GEMINI_API_KEY=... python -m fixer.api`
+- Use fixer at `http://localhost:8001` when you integrate it.

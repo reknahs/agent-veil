@@ -1,125 +1,143 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { AttackGraph, type WorkflowRecord } from "@/components/AttackGraph";
-import { BreachDetailModal, type Breach } from "@/components/BreachDetailModal";
-import { WorkflowDetailModal } from "@/components/WorkflowDetailModal";
-import { AgentErrorDetailModal, type AgentErrorRecord } from "@/components/AgentErrorDetailModal";
-import { BreachFeed } from "@/components/BreachFeed";
+import React, { useState, useEffect } from "react";
+
+type ErrorItem = { title: string; issueSummary: string; description: string; status: string };
+
+type ScanResult = {
+  ok: boolean;
+  summary: string;
+  message: string;
+  errors?: ErrorItem[];
+};
+
+type CardState = "Completed" | "In process" | "Unseen";
+
+function getCardState(err: ErrorItem): CardState {
+  const s = (err.status || "").toLowerCase();
+  if (s === "finished") return "Completed";
+  if (s === "stopped" || s === "error") return "In process";
+  return "Unseen";
+}
 
 export default function DashboardPage() {
-  const launchAttack = useAction(api.actions.launchAttack);
-  const seedDemoWorkflows = useMutation(api.mutations.seedDemoWorkflows);
-  const rebuildSecurity = useAction(api.actions.rebuildSecurity);
-  const createFixPrForWorkflow = useAction(api.actions.createFixPrForWorkflow);
-  const startAgentScan = useAction(api.actions.startAgentScan);
-  const clearDemoData = useMutation(api.mutations.clearDemoData);
-  const prStatus = useQuery(api.queries.getPrStatus);
-  const agentErrors = useQuery(api.queries.listAgentErrors, { limit: 50 });
   const [targetUrl, setTargetUrl] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
-  const [attacking, setAttacking] = useState(false);
-  const [loadingDemo, setLoadingDemo] = useState(false);
-  const [rebuilding, setRebuilding] = useState(false);
-  const [workflowFixLoading, setWorkflowFixLoading] = useState(false);
-  const [agentScanLoading, setAgentScanLoading] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [selectedBreach, setSelectedBreach] = useState<Breach | null>(null);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowRecord | null>(null);
-  const [selectedAgentError, setSelectedAgentError] = useState<AgentErrorRecord | null>(null);
-  const hasClearedOnMount = useRef(false);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<ScanResult | null>(null);
+  const [streamingErrors, setStreamingErrors] = useState<ErrorItem[]>([]);
+  const [selectedError, setSelectedError] = useState<ErrorItem | null>(null);
+
+  const handleCreatePullRequest = (err: ErrorItem) => {
+    // Placeholder: will connect to build module later
+    setSelectedError(null);
+    // TODO: call build module with err (e.g. title + issueSummary for PR body)
+  };
 
   useEffect(() => {
-    if (hasClearedOnMount.current) return;
-    hasClearedOnMount.current = true;
-    clearDemoData({});
-  }, [clearDemoData]);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedError(null);
+    };
+    if (selectedError) {
+      document.addEventListener("keydown", onKeyDown);
+      return () => document.removeEventListener("keydown", onKeyDown);
+    }
+  }, [selectedError]);
 
-  const handleLaunchAttack = async () => {
+  const handleAnalyze = async () => {
     if (!targetUrl.trim()) return;
-    setAttacking(true);
+    setLoading(true);
+    setResult(null);
+    setStreamingErrors([]);
+    const payload = {
+      target_url: targetUrl.trim(),
+      github_repo: githubRepo.trim() || undefined,
+      site_description: undefined,
+    };
     try {
-      await launchAttack({ demo: true, target_url: targetUrl.trim() });
-    } finally {
-      setAttacking(false);
-    }
-  };
-
-  const handleLoadDemoGraph = async () => {
-    setLoadingDemo(true);
-    try {
-      await seedDemoWorkflows({});
-    } finally {
-      setLoadingDemo(false);
-    }
-  };
-
-  const handleRebuild = async (singleBreach?: Breach) => {
-    setRebuilding(true);
-    try {
-      await rebuildSecurity({
-        github_repo: githubRepo.trim() ? githubRepo.trim() : undefined,
-        single_breach: singleBreach,
+      const res = await fetch("/api/run-scan/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      if (singleBreach) setSelectedBreach(null);
-    } finally {
-      setRebuilding(false);
-    }
-  };
+      const contentType = res.headers.get("content-type") || "";
+      const isJson = contentType.includes("application/json");
 
-  const handleCreateFixPrForWorkflow = async (workflow: WorkflowRecord) => {
-    if (!workflow.issue_summary) return;
-    setWorkflowFixLoading(true);
-    try {
-      await createFixPrForWorkflow({
-        workflow_id: workflow._id,
-        label: workflow.label,
-        issue_summary: workflow.issue_summary,
-        github_repo: githubRepo.trim() ? githubRepo.trim() : undefined,
+      if (!res.ok || isJson) {
+        const data: ScanResult = await res.json().catch(() => ({
+          ok: false,
+          summary: "",
+          message: res.statusText || `HTTP ${res.status}`,
+          errors: [],
+        }));
+        setResult({
+          ok: data.ok ?? false,
+          summary: "",
+          message: data.message ?? "",
+          errors: data.errors ?? [],
+        });
+        setLoading(false);
+        return;
+      }
+      if (!res.body) {
+        setLoading(false);
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() ?? "";
+        for (const chunk of lines) {
+          const match = chunk.match(/^data:\s*(.+)/m);
+          if (!match) continue;
+          try {
+            const item = JSON.parse(match[1].trim());
+            if (item.type === "error" && item.payload) {
+              setStreamingErrors((prev) => [...(prev || []), item.payload]);
+            } else if (item.type === "done") {
+              setResult({
+                ok: item.ok ?? false,
+                summary: "",
+                message: item.message ?? "",
+                errors: item.errors ?? [],
+              });
+            } else if (item.type === "error" && item.message) {
+              setResult({
+                ok: false,
+                summary: "",
+                message: item.message,
+                errors: [],
+              });
+            }
+          } catch {
+            // ignore parse errors for partial chunks
+          }
+        }
+      }
+    } catch (e) {
+      const msg =
+        e instanceof TypeError && e.message === "Failed to fetch"
+          ? "Could not reach the agent API. Start it from the agent folder: python -m api (or uvicorn api:app --port 8002)"
+          : e instanceof Error
+            ? e.message
+            : "Request failed";
+      setResult({
+        ok: false,
+        summary: "",
+        message: msg,
       });
     } finally {
-      setWorkflowFixLoading(false);
+      setLoading(false);
+      setStreamingErrors([]);
     }
   };
 
-  const handleCreateFixPrForAgentError = async (err: AgentErrorRecord) => {
-    setWorkflowFixLoading(true);
-    try {
-      await createFixPrForWorkflow({
-        label: err.title,
-        issue_summary: err.issueSummary,
-        github_repo: githubRepo.trim() ? githubRepo.trim() : undefined,
-      });
-    } finally {
-      setWorkflowFixLoading(false);
-    }
-  };
-
-  const handleRunAgentScan = async () => {
-    if (!targetUrl.trim()) return;
-    setAgentScanLoading(true);
-    try {
-      await startAgentScan({ target_url: targetUrl.trim() });
-    } finally {
-      setAgentScanLoading(false);
-    }
-  };
-
-  const canLaunch = targetUrl.trim().length > 0;
-
-  const handleReset = async () => {
-    setResetting(true);
-    setSelectedBreach(null);
-    setSelectedWorkflow(null);
-    setSelectedAgentError(null);
-    try {
-      await clearDemoData({});
-    } finally {
-      setResetting(false);
-    }
-  };
+  const canAnalyze = targetUrl.trim().length > 0;
 
   return (
     <div className="dashboard">
@@ -127,20 +145,20 @@ export default function DashboardPage() {
         <div className="dashboard-header-top">
           <div className="dashboard-title-block">
             <h1>Security Cartographer</h1>
-            <p className="dashboard-tagline">Live attack graph & breach feed</p>
+            <p className="dashboard-tagline">Analyze a website and GitHub repo</p>
           </div>
         </div>
 
         <div className="dashboard-target-row">
           <label htmlFor="target-url" className="target-label">
-            Target URL
+            Website URL
           </label>
           <input
             id="target-url"
             type="url"
             value={targetUrl}
             onChange={(e) => setTargetUrl(e.target.value)}
-            placeholder="https://jayadevgh.github.io"
+            placeholder="https://example.com"
             className="target-input"
           />
           <label htmlFor="github-repo" className="target-label">
@@ -151,158 +169,130 @@ export default function DashboardPage() {
             type="text"
             value={githubRepo}
             onChange={(e) => setGithubRepo(e.target.value)}
-            placeholder="owner/repo (e.g. jayadevgh/jayadevgh.github.io)"
+            placeholder="owner/repo (optional)"
             className="target-input"
           />
           <button
             type="button"
-            className="btn btn-ghost"
-            onClick={handleReset}
-            disabled={resetting}
-            title="Clear breaches, logs, and reset graph"
-          >
-            {resetting ? "Resetting…" : "Reset"}
-          </button>
-        </div>
-
-        <div className="dashboard-actions">
-          <button
-            type="button"
             className="btn btn-primary"
-            onClick={handleLoadDemoGraph}
-            disabled={loadingDemo}
-            title="Load a predetermined graph with red (issue) and black (ok) workflow nodes for testing"
+            onClick={handleAnalyze}
+            disabled={loading || !canAnalyze}
+            title={!canAnalyze ? "Enter Website URL first" : undefined}
           >
-            {loadingDemo ? "Loading…" : "Load demo graph"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleLaunchAttack}
-            disabled={attacking || !canLaunch}
-            title={!canLaunch ? "Enter Target URL first" : undefined}
-          >
-            {attacking ? "Running…" : "Launch Attack (demo)"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => handleRebuild()}
-            disabled={rebuilding}
-          >
-            {rebuilding ? "Creating PR…" : "Rebuild Security"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleRunAgentScan}
-            disabled={agentScanLoading || !targetUrl.trim()}
-            title="Run agent to find issues on the target site; results appear in Agent findings below"
-          >
-            {agentScanLoading ? "Running agent…" : "Run agent scan"}
+            {loading ? "Analyzing…" : "Analyze"}
           </button>
         </div>
-
-        {prStatus && (prStatus.pr_url || prStatus.message) && (
-          <p className="dashboard-pr-status">
-            {prStatus.pr_url ? (
-              <>
-                PR:{" "}
-                <a href={prStatus.pr_url} target="_blank" rel="noopener noreferrer" className="pr-link">
-                  {prStatus.pr_url}
-                </a>
-                {prStatus.message && <span className="pr-message"> — {prStatus.message}</span>}
-              </>
-            ) : (
-              <span className="pr-message">{prStatus.message}</span>
-            )}
-          </p>
-        )}
       </header>
 
       <main className="dashboard-main">
-        <section className="dashboard-graph">
-          <h2>Attack graph</h2>
-          <p className="dashboard-graph-hint">
-            Click &quot;Load demo graph&quot; to show workflow nodes. Red = issue, black = OK. Click a node for details.
-          </p>
-          <div className="graph-container">
-            <AttackGraph
-              targetUrl={targetUrl}
-              onBreachSelect={setSelectedBreach}
-              onWorkflowSelect={setSelectedWorkflow}
-            />
-          </div>
-          <div className="agent-findings">
-            <div className="agent-findings-header">
-              <h3 className="agent-findings-title">Agent findings</h3>
-              {agentErrors && agentErrors.length > 0 && (
-                <span className="agent-findings-title">{agentErrors.length} issue(s)</span>
+        {(result || loading) && (
+          <section className="findings-section">
+            <header className="findings-header">
+              <h2 className="findings-title">Findings</h2>
+              {loading && streamingErrors.length === 0 && !result && (
+                <span className="findings-badge findings-badge-loading">Analyzing…</span>
               )}
-            </div>
-            {agentErrors == null ? (
-              <p className="agent-findings-empty">Loading…</p>
-            ) : agentErrors.length === 0 ? (
-              <p className="agent-findings-empty">
-                Enter a website URL and GitHub repo, then click &quot;Run agent scan&quot; to find issues. Each finding appears as a card; click for details and &quot;Fix PR request&quot;.
-              </p>
-            ) : (
-              <div className="agent-findings-grid">
-                {agentErrors.map((err) => (
-                  <button
-                    key={err._id}
-                    type="button"
-                    className="agent-finding-card"
-                    onClick={() => setSelectedAgentError(err)}
-                  >
-                    <span className="agent-finding-tag">Issue</span>
-                    <h4 className="agent-finding-title">{err.title}</h4>
-                    <p className="agent-finding-description">{err.issueSummary}</p>
-                    <p className="agent-finding-meta">
-                      Last: {new Date(err.createdAt).toLocaleString()}
-                    </p>
-                  </button>
-                ))}
+              {result?.message && !loading && (
+                <span className="findings-count">{result.message}</span>
+              )}
+              {loading && streamingErrors.length > 0 && (
+                <span className="findings-count">{streamingErrors.length} issue(s) so far…</span>
+              )}
+            </header>
+
+            {!result?.errors?.length && !streamingErrors.length && result?.ok && !loading && (
+              <div className="finding-card finding-card-empty">
+                <p>No issues found.</p>
               </div>
             )}
-          </div>
-        </section>
 
-        <aside className="dashboard-feed">
-          <BreachFeed />
-        </aside>
+            {((result?.errors?.length ?? 0) > 0 || streamingErrors.length > 0) && (
+              <div className="finding-cards-grid">
+                {(loading ? streamingErrors : result?.errors ?? []).map((err, i) => {
+                  const state = getCardState(err);
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      className="finding-card"
+                      onClick={() => setSelectedError(err)}
+                    >
+                      <span className={`finding-card-state finding-card-state-${state.replace(/\s+/g, "-").toLowerCase()}`}>
+                        {state}
+                      </span>
+                      <h3 className="finding-card-title">{err.title}</h3>
+                      <p className="finding-card-description">{err.issueSummary}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {result && !result.ok && ((result?.errors?.length ?? 0) === 0 && !streamingErrors.length) && (
+              <div className="finding-card finding-card-error">
+                <p>{result.message}</p>
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
-      {selectedBreach && (
-        <BreachDetailModal
-          breach={selectedBreach}
-          onClose={() => setSelectedBreach(null)}
-          onCreateFixPR={() => handleRebuild(selectedBreach)}
-          loading={rebuilding}
-        />
-      )}
-      {selectedWorkflow && (
-        <WorkflowDetailModal
-          workflow={{
-            _id: selectedWorkflow._id,
-            label: selectedWorkflow.label,
-            status: selectedWorkflow.status,
-            issue_summary: selectedWorkflow.issue_summary,
-            steps: selectedWorkflow.steps,
-            step_count: selectedWorkflow.step_count,
-          }}
-          onClose={() => setSelectedWorkflow(null)}
-          onCreateFixPR={() => handleCreateFixPrForWorkflow(selectedWorkflow)}
-          loading={workflowFixLoading}
-        />
-      )}
-      {selectedAgentError && (
-        <AgentErrorDetailModal
-          error={selectedAgentError}
-          onClose={() => setSelectedAgentError(null)}
-          onCreateFixPR={() => handleCreateFixPrForAgentError(selectedAgentError)}
-          loading={workflowFixLoading}
-        />
+      {selectedError && (
+        <div
+          className="finding-modal-backdrop"
+          onClick={() => setSelectedError(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="finding-modal-title"
+        >
+          <div
+            className="finding-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="finding-modal-close"
+              onClick={() => setSelectedError(null)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div className="finding-modal-content">
+              <span className={`finding-modal-status finding-modal-status-${(selectedError.status || "issue").toLowerCase()}`}>
+                {selectedError.status || "Issue"}
+              </span>
+              <h2 id="finding-modal-title" className="finding-modal-title">
+                {selectedError.title}
+              </h2>
+              <div className="finding-modal-section">
+                <h4 className="finding-modal-label">Summary</h4>
+                <p className="finding-modal-summary">{selectedError.issueSummary}</p>
+              </div>
+              {selectedError.description && (
+                <div className="finding-modal-section">
+                  <h4 className="finding-modal-label">Description</h4>
+                  <pre className="finding-modal-description">{selectedError.description}</pre>
+                </div>
+              )}
+              <div className="finding-modal-actions">
+                <button
+                  type="button"
+                  className="finding-modal-btn finding-modal-btn-primary"
+                  onClick={() => handleCreatePullRequest(selectedError)}
+                >
+                  Create pull request
+                </button>
+                <button
+                  type="button"
+                  className="finding-modal-btn finding-modal-btn-secondary"
+                  onClick={() => setSelectedError(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
