@@ -2,7 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 
-type ErrorItem = { title: string; issueSummary: string; description: string; status: string };
+type ErrorItem = {
+  title: string;
+  issueSummary: string;
+  description: string;
+  status: string;
+  pullRequestUrl?: string;
+};
 
 type ScanResult = {
   ok: boolean;
@@ -14,10 +20,21 @@ type ScanResult = {
 type CardState = "Completed" | "In process" | "Unseen";
 
 function getCardState(err: ErrorItem): CardState {
-  const s = (err.status || "").toLowerCase();
+  const s = (err?.status || "").toLowerCase();
   if (s === "finished") return "Completed";
   if (s === "stopped" || s === "error") return "In process";
   return "Unseen";
+}
+
+function normalizeError(raw: unknown): ErrorItem {
+  const o = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  return {
+    title: typeof o.title === "string" ? o.title : "Issue",
+    issueSummary: typeof o.issueSummary === "string" ? o.issueSummary : String(o.error_summary ?? "—"),
+    description: typeof o.description === "string" ? o.description : "",
+    status: typeof o.status === "string" ? o.status : "issue",
+    pullRequestUrl: typeof o.pullRequestUrl === "string" ? o.pullRequestUrl : undefined,
+  };
 }
 
 export default function DashboardPage() {
@@ -70,11 +87,12 @@ export default function DashboardPage() {
           message: res.statusText || `HTTP ${res.status}`,
           errors: [],
         }));
+        const errs = Array.isArray(data.errors) ? data.errors.map(normalizeError) : [];
         setResult({
           ok: data.ok ?? false,
-          summary: "",
-          message: data.message ?? "",
-          errors: data.errors ?? [],
+          summary: data.summary ?? "",
+          message: data.message ?? "Request failed",
+          errors: errs,
         });
         setLoading(false);
         return;
@@ -98,13 +116,14 @@ export default function DashboardPage() {
           try {
             const item = JSON.parse(match[1].trim());
             if (item.type === "error" && item.payload) {
-              setStreamingErrors((prev) => [...(prev || []), item.payload]);
+              setStreamingErrors((prev) => [...(prev || []), normalizeError(item.payload)]);
             } else if (item.type === "done") {
+              const doneErrs = Array.isArray(item.errors) ? item.errors.map(normalizeError) : [];
               setResult({
                 ok: item.ok ?? false,
-                summary: "",
-                message: item.message ?? "",
-                errors: item.errors ?? [],
+                summary: item.summary ?? "",
+                message: item.message ?? (doneErrs.length ? `Found ${doneErrs.length} issue(s).` : "No issues found."),
+                errors: doneErrs,
               });
             } else if (item.type === "error" && item.message) {
               setResult({
@@ -130,6 +149,7 @@ export default function DashboardPage() {
         ok: false,
         summary: "",
         message: msg,
+        errors: [],
       });
     } finally {
       setLoading(false);
@@ -207,21 +227,24 @@ export default function DashboardPage() {
             )}
 
             {((result?.errors?.length ?? 0) > 0 || streamingErrors.length > 0) && (
-              <div className="finding-cards-grid">
+              <div className="finding-cards-grid" role="list">
                 {(loading ? streamingErrors : result?.errors ?? []).map((err, i) => {
                   const state = getCardState(err);
+                  const safeTitle = err?.title ?? "Issue";
+                  const safeSummary = err?.issueSummary ?? "";
                   return (
                     <button
-                      key={i}
+                      key={`finding-${i}-${safeTitle.slice(0, 36)}`}
                       type="button"
                       className="finding-card"
                       onClick={() => setSelectedError(err)}
+                      role="listitem"
                     >
                       <span className={`finding-card-state finding-card-state-${state.replace(/\s+/g, "-").toLowerCase()}`}>
                         {state}
                       </span>
-                      <h3 className="finding-card-title">{err.title}</h3>
-                      <p className="finding-card-description">{err.issueSummary}</p>
+                      <h3 className="finding-card-title">{safeTitle}</h3>
+                      <p className="finding-card-description">{safeSummary}</p>
                     </button>
                   );
                 })}
@@ -229,8 +252,8 @@ export default function DashboardPage() {
             )}
 
             {result && !result.ok && ((result?.errors?.length ?? 0) === 0 && !streamingErrors.length) && (
-              <div className="finding-card finding-card-error">
-                <p>{result.message}</p>
+              <div className="finding-card finding-card-error" role="alert">
+                <p>{result.message ?? "Something went wrong."}</p>
               </div>
             )}
           </section>
@@ -274,14 +297,38 @@ export default function DashboardPage() {
                   <pre className="finding-modal-description">{selectedError.description}</pre>
                 </div>
               )}
+              {selectedError.pullRequestUrl && (
+                <div className="finding-modal-section finding-modal-pr">
+                  <h4 className="finding-modal-label">Pull request</h4>
+                  <a
+                    href={selectedError.pullRequestUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="finding-modal-pr-link"
+                  >
+                    View pull request →
+                  </a>
+                </div>
+              )}
               <div className="finding-modal-actions">
-                <button
-                  type="button"
-                  className="finding-modal-btn finding-modal-btn-primary"
-                  onClick={() => handleCreatePullRequest(selectedError)}
-                >
-                  Create pull request
-                </button>
+                {selectedError.pullRequestUrl ? (
+                  <a
+                    href={selectedError.pullRequestUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="finding-modal-btn finding-modal-btn-primary"
+                  >
+                    View pull request
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="finding-modal-btn finding-modal-btn-primary"
+                    onClick={() => handleCreatePullRequest(selectedError)}
+                  >
+                    Create pull request
+                  </button>
+                )}
                 <button
                   type="button"
                   className="finding-modal-btn finding-modal-btn-secondary"

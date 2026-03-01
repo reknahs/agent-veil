@@ -506,6 +506,24 @@ body {
 .finding-modal-btn-secondary:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+.finding-modal-actions a.finding-modal-btn-primary {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.finding-modal-pr {
+  margin-top: 1rem;
+}
+.finding-modal-pr-link {
+  color: #86efac;
+  font-weight: 600;
+  text-decoration: none;
+}
+.finding-modal-pr-link:hover {
+  text-decoration: underline;
+}
 
 .summary-box {
   padding: 1.25rem 1.5rem;
