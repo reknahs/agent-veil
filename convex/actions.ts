@@ -3,81 +3,62 @@ import { action } from "./_generated/server.js";
 import { internal } from "./_generated/api";
 
 const FIXER_API_URL = process.env.FIXER_API_URL ?? "";
-const AGENT_API_URL = process.env.AGENT_API_URL ?? "";
+const ORCHESTRATOR_API_URL = process.env.ORCHESTRATOR_API_URL ?? "";
 
 /**
- * Launch Attack — demo mode or real agent.
- * If demo: true (default), inserts sample logs/breaches.
- * If AGENT_API_URL is set and demo: false, triggers the real Infiltrator agent.
+ * Launch Attack — inserts sample logs/breaches for the given target URL (demo).
  */
 export const launchAttack = action({
   args: { demo: v.optional(v.boolean()), target_url: v.optional(v.string()) },
   handler: async (ctx, { demo = true, target_url }) => {
-    if (AGENT_API_URL && !demo) {
-      try {
-        const url = target_url ?? "http://localhost:3000";
-        const res = await fetch(`${AGENT_API_URL}/run`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target_url: url }),
-        });
-        const data = (await res.json()) as { ok?: boolean };
-        return { ok: !!data?.ok, mode: "agent" };
-      } catch (e) {
-        return { ok: false, error: String(e) };
-      }
-    }
-
-    if (demo) {
-      const base = target_url ?? "http://localhost:3000";
-      const isStaticSite = base.includes("jayadevgh.github.io") || base.includes("github.io");
-      if (isStaticSite) {
-        await ctx.runMutation(internal.mutations.internalInsertLog, {
-          message: "Running Shields Up (security headers) on static site...",
-          level: "info",
-        });
-        await ctx.runMutation(internal.mutations.internalInsertLog, {
-          message: "Missing headers: Content-Security-Policy, X-Frame-Options",
-          level: "success",
-        });
-        await ctx.runMutation(internal.mutations.internalAddBreach, {
-          url: "/",
-          type: "Missing Headers",
-        });
-        await ctx.runMutation(internal.mutations.internalInsertLog, {
-          message: "Checking /about...",
-          level: "info",
-        });
-        await ctx.runMutation(internal.mutations.internalAddBreach, {
-          url: "/about",
-          type: "Missing Headers",
-        });
-      } else {
-        await ctx.runMutation(internal.mutations.internalInsertLog, {
-          message: "Attempting IDOR on /api/user...",
-          level: "info",
-        });
-        await ctx.runMutation(internal.mutations.internalInsertLog, {
-          message: "Attempting IDOR on /api/user... Success.",
-          level: "success",
-        });
-        await ctx.runMutation(internal.mutations.internalAddBreach, {
-          url: "/api/user",
-          type: "IDOR",
-        });
-        await ctx.runMutation(internal.mutations.internalInsertLog, {
-          message: "Checking /api/orders for auth bypass...",
-          level: "info",
-        });
-        await ctx.runMutation(internal.mutations.internalInsertLog, {
-          message: "Auth bypass on /api/orders confirmed.",
-          level: "success",
-        });
-        await ctx.runMutation(internal.mutations.internalAddBreach, {
-          url: "/api/orders",
-          type: "Auth Bypass",
-        });
-      }
+    const base = target_url ?? "http://localhost:3000";
+    const isStaticSite = base.includes("jayadevgh.github.io") || base.includes("github.io");
+    if (isStaticSite) {
+      await ctx.runMutation(internal.mutations.internalInsertLog, {
+        message: "Running Shields Up (security headers) on static site...",
+        level: "info",
+      });
+      await ctx.runMutation(internal.mutations.internalInsertLog, {
+        message: "Missing headers: Content-Security-Policy, X-Frame-Options",
+        level: "success",
+      });
+      await ctx.runMutation(internal.mutations.internalAddBreach, {
+        url: "/",
+        type: "Missing Headers",
+      });
+      await ctx.runMutation(internal.mutations.internalInsertLog, {
+        message: "Checking /about...",
+        level: "info",
+      });
+      await ctx.runMutation(internal.mutations.internalAddBreach, {
+        url: "/about",
+        type: "Missing Headers",
+      });
+    } else {
+      await ctx.runMutation(internal.mutations.internalInsertLog, {
+        message: "Attempting IDOR on /api/user...",
+        level: "info",
+      });
+      await ctx.runMutation(internal.mutations.internalInsertLog, {
+        message: "Attempting IDOR on /api/user... Success.",
+        level: "success",
+      });
+      await ctx.runMutation(internal.mutations.internalAddBreach, {
+        url: "/api/user",
+        type: "IDOR",
+      });
+      await ctx.runMutation(internal.mutations.internalInsertLog, {
+        message: "Checking /api/orders for auth bypass...",
+        level: "info",
+      });
+      await ctx.runMutation(internal.mutations.internalInsertLog, {
+        message: "Auth bypass on /api/orders confirmed.",
+        level: "success",
+      });
+      await ctx.runMutation(internal.mutations.internalAddBreach, {
+        url: "/api/orders",
+        type: "Auth Bypass",
+      });
     }
     return { ok: true };
   },
@@ -150,5 +131,54 @@ export const rebuildSecurity = action({
       message,
     });
     return { ok: true, pr_url: prUrl ?? undefined };
+  },
+});
+
+/**
+ * Start workflow scan: clear old workflows, then trigger orchestrator (url + repo).
+ * Orchestrator creates scan run in Convex and runs LLM + Browser Use in background.
+ */
+export const startWorkflowScan = action({
+  args: {
+    target_url: v.string(),
+    github_repo: v.string(),
+  },
+  handler: async (ctx, { target_url, github_repo }) => {
+    await ctx.runMutation(internal.mutations.internalClearWorkflows);
+
+    if (!ORCHESTRATOR_API_URL) {
+      await ctx.runMutation(internal.mutations.internalInsertLog, {
+        message: "Workflow scan skipped: set ORCHESTRATOR_API_URL and run scanner (see scanner/api.py)",
+        level: "warn",
+      });
+      return { ok: false, error: "ORCHESTRATOR_API_URL not set" };
+    }
+
+    try {
+      const res = await fetch(`${ORCHESTRATOR_API_URL}/scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target_url: target_url.trim(),
+          github_repo: github_repo.trim().replace(/^https?:\/\/github\.com\/?/, "").replace(/\/$/, ""),
+        }),
+      });
+      const data = (await res.json()) as { ok?: boolean; scanRunId?: string; error?: string };
+      if (data?.ok && data.scanRunId) {
+        await ctx.runMutation(internal.mutations.internalInsertLog, {
+          message: `Workflow scan started (scanRunId: ${data.scanRunId}). Watch the graph for progress.`,
+          level: "info",
+        });
+        return { ok: true, scanRunId: data.scanRunId };
+      }
+      return { ok: false, error: data?.error ?? "Orchestrator did not return scanRunId" };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await ctx.runMutation(internal.mutations.internalInsertLog, {
+        message: `Workflow scan failed: ${msg}`,
+        level: "error",
+      });
+      return { ok: false, error: msg };
+    }
   },
 });

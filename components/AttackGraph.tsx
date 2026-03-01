@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import dynamic from "next/dynamic";
 import { useMemo } from "react";
 import { api } from "@/convex/_generated/api";
+import type { Doc } from "@/convex/_generated/dataModel";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
@@ -30,17 +31,42 @@ function pathFromUrl(url: string): string {
 
 export type BreachRecord = { url: string; type: string };
 
+export type WorkflowRecord = Doc<"workflows">;
+
 export function AttackGraph({
   targetUrl,
   onBreachSelect,
+  onWorkflowSelect,
 }: {
   targetUrl?: string;
   onBreachSelect?: (breach: BreachRecord) => void;
+  onWorkflowSelect?: (workflow: WorkflowRecord) => void;
 }) {
   const breaches = useQuery(api.queries.listBreaches);
+  const workflows = useQuery(api.queries.listWorkflows);
   const defaultRoutes = useMemo(() => getDefaultRoutes(targetUrl), [targetUrl]);
 
-  const { graphData, breachedUrls, breachByPath } = useMemo(() => {
+  const useWorkflowGraph = (workflows?.length ?? 0) > 0;
+
+  const { graphData, breachedUrls, breachByPath, workflowByNodeId } = useMemo(() => {
+    if (useWorkflowGraph && workflows && workflows.length > 0) {
+      const rootId = "Scan";
+      const nodes = [
+        { id: rootId, label: rootId },
+        ...workflows.map((w) => ({ id: w._id, label: w.label })),
+      ];
+      const links = workflows.map((w) => ({ source: rootId, target: w._id }));
+      const byNodeId = new Map<string, WorkflowRecord>();
+      workflows.forEach((w) => byNodeId.set(w._id, w));
+      const hasIssueIds = new Set(workflows.filter((w) => w.status === "has_issue").map((w) => w._id));
+      return {
+        graphData: { nodes, links },
+        breachedUrls: hasIssueIds,
+        breachByPath: new Map<string, BreachRecord>(),
+        workflowByNodeId: byNodeId,
+      };
+    }
+
     const breached = new Set<string>();
     const allRoutes = new Set<string>(defaultRoutes);
     const byPath = new Map<string, BreachRecord>();
@@ -59,17 +85,25 @@ export function AttackGraph({
       graphData: { nodes, links },
       breachedUrls: breached,
       breachByPath: byPath,
+      workflowByNodeId: new Map<string, WorkflowRecord>(),
     };
-  }, [breaches, defaultRoutes]);
+  }, [breaches, defaultRoutes, useWorkflowGraph, workflows]);
 
   const handleNodeClick = useMemo(() => {
+    if (useWorkflowGraph && onWorkflowSelect) {
+      return (node: { id?: string | number }) => {
+        const id = String(node.id ?? "");
+        const workflow = workflowByNodeId.get(id);
+        if (workflow) onWorkflowSelect(workflow);
+      };
+    }
     if (!onBreachSelect) return undefined;
     return (node: { id?: string | number }) => {
       const path = String(node.id ?? "");
       const breach = breachByPath.get(path);
       if (breach) onBreachSelect(breach);
     };
-  }, [onBreachSelect, breachByPath]);
+  }, [useWorkflowGraph, onWorkflowSelect, onBreachSelect, breachByPath, workflowByNodeId]);
 
   const nodeCanvasObject = useMemo(
     () =>
@@ -78,19 +112,24 @@ export function AttackGraph({
         ctx: CanvasRenderingContext2D,
         globalScale: number
       ) => {
-        const label = String(node.id ?? "");
-        const breached = breachedUrls.has(String(node.id ?? ""));
+        const id = String(node.id ?? "");
+        const label = useWorkflowGraph
+          ? (workflowByNodeId.get(id)?.label ?? id)
+          : id;
+        const breached = breachedUrls.has(id);
+        const pending = useWorkflowGraph && workflowByNodeId.get(id)?.status === "pending";
         const fontSize = 12 / globalScale;
         ctx.font = `${fontSize}px sans-serif`;
         const padding = 4;
-        const metrics = ctx.measureText(label);
+        const displayLabel = label.length > 24 ? label.slice(0, 22) + "…" : label;
+        const metrics = ctx.measureText(displayLabel);
         const w = metrics.width + padding * 2;
         const h = fontSize + padding * 2;
         const r = Math.max(w, h) / 2;
 
         ctx.beginPath();
         ctx.arc(node.x ?? 0, node.y ?? 0, r, 0, 2 * Math.PI);
-        ctx.fillStyle = breached ? "#dc2626" : "#27272a";
+        ctx.fillStyle = breached ? "#dc2626" : pending ? "#52525b" : "#27272a";
         ctx.fill();
         ctx.strokeStyle = breached ? "#f87171" : "#3f3f46";
         ctx.lineWidth = 2 / globalScale;
@@ -99,9 +138,9 @@ export function AttackGraph({
         ctx.fillStyle = "#e4e4e7";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(label, node.x ?? 0, node.y ?? 0);
+        ctx.fillText(displayLabel, node.x ?? 0, node.y ?? 0);
       },
-    [breachedUrls]
+    [breachedUrls, useWorkflowGraph, workflowByNodeId]
   );
 
   const nodePointerAreaPaint = useMemo(

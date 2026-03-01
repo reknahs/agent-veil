@@ -3,21 +3,26 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { AttackGraph } from "@/components/AttackGraph";
+import { AttackGraph, type WorkflowRecord } from "@/components/AttackGraph";
 import { BreachDetailModal, type Breach } from "@/components/BreachDetailModal";
+import { WorkflowDetailModal } from "@/components/WorkflowDetailModal";
 import { BreachFeed } from "@/components/BreachFeed";
 
 export default function DashboardPage() {
   const launchAttack = useAction(api.actions.launchAttack);
+  const startWorkflowScan = useAction(api.actions.startWorkflowScan);
   const rebuildSecurity = useAction(api.actions.rebuildSecurity);
   const clearDemoData = useMutation(api.mutations.clearDemoData);
   const prStatus = useQuery(api.queries.getPrStatus);
+  const scanStatus = useQuery(api.queries.getScanStatus);
   const [targetUrl, setTargetUrl] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
   const [attacking, setAttacking] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [selectedBreach, setSelectedBreach] = useState<Breach | null>(null);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowRecord | null>(null);
   const hasClearedOnMount = useRef(false);
 
   useEffect(() => {
@@ -26,7 +31,7 @@ export default function DashboardPage() {
     clearDemoData({});
   }, [clearDemoData]);
 
-  const handleLaunchDemo = async () => {
+  const handleLaunchAttack = async () => {
     if (!targetUrl.trim()) return;
     setAttacking(true);
     try {
@@ -36,13 +41,16 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLaunchReal = async () => {
-    if (!targetUrl.trim()) return;
-    setAttacking(true);
+  const handleStartWorkflowScan = async () => {
+    if (!targetUrl.trim() || !githubRepo.trim()) return;
+    setScanning(true);
     try {
-      await launchAttack({ demo: false, target_url: targetUrl.trim() });
+      await startWorkflowScan({
+        target_url: targetUrl.trim(),
+        github_repo: githubRepo.trim().replace(/^https?:\/\/github\.com\/?/, "").replace(/\/$/, ""),
+      });
     } finally {
-      setAttacking(false);
+      setScanning(false);
     }
   };
 
@@ -60,10 +68,13 @@ export default function DashboardPage() {
   };
 
   const canLaunch = targetUrl.trim().length > 0;
+  const canStartScan = targetUrl.trim().length > 0 && githubRepo.trim().length > 0;
+  const scanInProgress = scanStatus?.status === "running" || scanStatus?.status === "pending";
 
   const handleReset = async () => {
     setResetting(true);
     setSelectedBreach(null);
+    setSelectedWorkflow(null);
     try {
       await clearDemoData({});
     } finally {
@@ -119,20 +130,20 @@ export default function DashboardPage() {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={handleLaunchDemo}
-            disabled={attacking || !canLaunch}
-            title={!canLaunch ? "Enter Target URL first" : undefined}
+            onClick={handleStartWorkflowScan}
+            disabled={scanning || !canStartScan || scanInProgress}
+            title={!canStartScan ? "Enter Target URL and GitHub Repo" : scanInProgress ? "Scan in progress" : undefined}
           >
-            {attacking ? "Running…" : "Launch Attack (Demo)"}
+            {scanning ? "Starting…" : scanInProgress ? "Scan running…" : "Start workflow scan"}
           </button>
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={handleLaunchReal}
+            onClick={handleLaunchAttack}
             disabled={attacking || !canLaunch}
-            title={!canLaunch ? "Enter Target URL first" : "Requires agent running (python agent/main.py)"}
+            title={!canLaunch ? "Enter Target URL first" : undefined}
           >
-            Launch Real Attack
+            {attacking ? "Running…" : "Launch Attack (demo)"}
           </button>
           <button
             type="button"
@@ -164,9 +175,17 @@ export default function DashboardPage() {
       <main className="dashboard-main">
         <section className="dashboard-graph">
           <h2>Attack graph</h2>
-          <p className="dashboard-graph-hint">Click a red node to see breach details</p>
+          <p className="dashboard-graph-hint">
+            {scanStatus?.status === "running" || scanStatus?.status === "pending"
+              ? "Workflow scan in progress…"
+              : "Click a node: red = issue, black = OK. Click for details."}
+          </p>
           <div className="graph-container">
-            <AttackGraph targetUrl={targetUrl} onBreachSelect={setSelectedBreach} />
+            <AttackGraph
+              targetUrl={targetUrl}
+              onBreachSelect={setSelectedBreach}
+              onWorkflowSelect={setSelectedWorkflow}
+            />
           </div>
         </section>
 
@@ -181,6 +200,19 @@ export default function DashboardPage() {
           onClose={() => setSelectedBreach(null)}
           onCreateFixPR={() => handleRebuild(selectedBreach)}
           loading={rebuilding}
+        />
+      )}
+      {selectedWorkflow && (
+        <WorkflowDetailModal
+          workflow={{
+            _id: selectedWorkflow._id,
+            label: selectedWorkflow.label,
+            status: selectedWorkflow.status,
+            issue_summary: selectedWorkflow.issue_summary,
+            steps: selectedWorkflow.steps,
+            step_count: selectedWorkflow.step_count,
+          }}
+          onClose={() => setSelectedWorkflow(null)}
         />
       )}
     </div>

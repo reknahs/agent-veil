@@ -17,12 +17,7 @@ Leave this running in a separate terminal. It syncs your Convex functions and sc
 | Feature | API Keys | Where |
 |---------|----------|-------|
 | **Demo mode** | None | Works out of the box |
-| **Launch Real Attack** | None | Agent needs `CONVEX_SITE_URL` (Convex site URL) |
 | **Rebuild Security (real PRs)** | `GITHUB_TOKEN`, `GEMINI_API_KEY` | Set in fixer env when running `python -m fixer.api` |
-
-### For Real Agent (Launch Real Attack)
-1. Run the agent: `cd agent && pip install -r requirements.txt && playwright install chromium && python main.py`
-2. Set in Convex dashboard: `AGENT_API_URL=http://localhost:8000`
 
 ### For Real Fixer (Rebuild Security → actual GitHub PR)
 1. Create a [GitHub Personal Access Token](https://github.com/settings/tokens) with `repo` scope

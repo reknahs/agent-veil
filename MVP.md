@@ -2,18 +2,13 @@
 
 ## Current Status
 
-### Person 1: Infiltrator (Agent & Telemetry) — DONE
-- **agent/playbooks.py** — 3 campaigns: Ghost Session, IDOR Hunter, Shields Up
-- **agent/telemetry.py** — Intercepts `page.on("response")` and `page.on("console")` for 401/403/500 and JS errors
-- **agent/main.py** — FastAPI entry point: `POST /run` triggers agent and sends results to Convex
-
-### Person 2: Cartographer (Live Graph & Dashboard) — DONE
+### Cartographer (Live Graph & Dashboard) — DONE
 - **components/AttackGraph.tsx** — React Force Graph, nodes turn red on breach
-- **components/BreachFeed.tsx** — Live agent thoughts log
+- **components/BreachFeed.tsx** — Live breach/log feed
 - **convex/schema.ts** — breaches, logs, pr_status
-- **convex/actions.ts** — launchAttack (demo + real agent), rebuildSecurity (calls fixer)
+- **convex/actions.ts** — launchAttack (demo), rebuildSecurity (calls fixer)
 - **convex/httpActions.ts** — POST /api/log, POST /api/breach, GET /api/breaches
-- **app/dashboard/page.tsx** — Launch Attack (Demo), Launch Real Attack, Rebuild Security
+- **app/dashboard/page.tsx** — Launch Attack, Rebuild Security
 
 ### Person 3: Architect (Fixer & Sandbox) — DONE
 - **fixer/repo_mapper.py** — Route → file path mapping
@@ -41,18 +36,7 @@ Set `.env.local`:
 NEXT_PUBLIC_CONVEX_URL=https://YOUR-DEPLOYMENT.convex.cloud
 ```
 
-### 2. Infiltrator Agent (optional — for real attacks)
-
-```bash
-cd agent
-pip install -r requirements.txt
-playwright install chromium
-CONVEX_SITE_URL=https://YOUR-DEPLOYMENT.convex.site python main.py
-```
-
-Set Convex env `AGENT_API_URL=http://your-agent-host:8000` to trigger real agent from "Launch Real Attack".
-
-### 3. Fixer API (optional — for real PRs)
+### 2. Fixer API (optional — for real PRs)
 
 ```bash
 pip install -r fixer/requirements.txt
@@ -66,6 +50,5 @@ Set Convex env `FIXER_API_URL=http://your-fixer-host:8001` so "Rebuild Security"
 
 ## Flow
 
-1. **Launch Attack (Demo)** — Inserts sample breaches/logs → graph nodes turn red, feed updates.
-2. **Launch Real Attack** — Calls agent API → agent runs 3 campaigns → POSTs to Convex → same UI.
-3. **Rebuild Security** — Convex action fetches breaches → POSTs to fixer → fixer runs repo_mapper → patch_engine → github_bot → PR created.
+1. **Launch Attack** — Inserts sample breaches/logs → graph nodes turn red, feed updates.
+2. **Rebuild Security** — Convex action fetches breaches → POSTs to fixer → fixer runs repo_mapper → patch_engine → github_bot → PR created.

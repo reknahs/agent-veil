@@ -33,4 +33,32 @@ export default defineSchema({
     message: v.optional(v.string()),
     updatedAt: v.number(),
   }),
+
+  workflows: defineTable({
+    scanId: v.string(),
+    label: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("ok"),
+      v.literal("has_issue")
+    ),
+    issue_summary: v.optional(v.string()),
+    steps: v.optional(v.array(v.string())),
+    step_count: v.optional(v.number()),
+    runAt: v.number(),
+  }).index("by_scan", ["scanId"]).index("by_runAt", ["runAt"]),
+
+  scan_runs: defineTable({
+    targetUrl: v.string(),
+    githubRepo: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    workflowCount: v.optional(v.number()),
+  }).index("by_startedAt", ["startedAt"]),
 });

@@ -142,7 +142,106 @@ export const clearDemoData = mutation({
         updatedAt: Date.now(),
       });
     }
+    const workflows = await ctx.db.query("workflows").collect();
+    for (const w of workflows) await ctx.db.delete(w._id);
+    const scanRuns = await ctx.db.query("scan_runs").collect();
+    for (const r of scanRuns) await ctx.db.delete(r._id);
     return { ok: true };
+  },
+});
+
+export const internalAppendWorkflow = internalMutation({
+  args: {
+    scanId: v.string(),
+    label: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("ok"),
+      v.literal("has_issue")
+    ),
+    issue_summary: v.optional(v.string()),
+    steps: v.optional(v.array(v.string())),
+    step_count: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const runAt = Date.now();
+    return await ctx.db.insert("workflows", {
+      ...args,
+      runAt,
+    });
+  },
+});
+
+export const internalUpdateWorkflowStatus = internalMutation({
+  args: {
+    workflowId: v.id("workflows"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("ok"),
+      v.literal("has_issue")
+    ),
+    issue_summary: v.optional(v.string()),
+    steps: v.optional(v.array(v.string())),
+    step_count: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { workflowId, ...patch } = args;
+    await ctx.db.patch(workflowId, patch);
+    return workflowId;
+  },
+});
+
+export const internalClearWorkflows = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("workflows").collect();
+    for (const w of all) await ctx.db.delete(w._id);
+    return { deleted: all.length };
+  },
+});
+
+export const internalClearScanRuns = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("scan_runs").collect();
+    for (const r of all) await ctx.db.delete(r._id);
+    return { deleted: all.length };
+  },
+});
+
+export const internalInsertScanRun = internalMutation({
+  args: {
+    targetUrl: v.string(),
+    githubRepo: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    startedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("scan_runs", args);
+  },
+});
+
+export const internalUpdateScanRun = internalMutation({
+  args: {
+    scanRunId: v.id("scan_runs"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    completedAt: v.optional(v.number()),
+    workflowCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { scanRunId, ...patch } = args;
+    await ctx.db.patch(scanRunId, patch);
+    return scanRunId;
   },
 });
 
