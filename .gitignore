@@ -208,3 +208,5 @@ __marimo__/
 
 .env.local
 node_modules/
+.next/
+tsconfig.tsbuildinfo
