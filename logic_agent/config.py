@@ -7,11 +7,16 @@ from typing import Optional
 # Load .env (or .env.example if .env is missing)
 try:
     from dotenv import load_dotenv
+    from pathlib import Path
+    _root = Path(__file__).resolve().parent.parent
+    load_dotenv(_root / ".env")
     load_dotenv()
     if not os.environ.get("BROWSER_USE_API_KEY") and os.path.isfile(".env.example"):
         load_dotenv(".env.example")
 except ImportError:
     pass
+
+# Generic e-commerce description
 
 
 # Generic e-commerce description when SITE_DESCRIPTION is not set (works for any site).
@@ -36,8 +41,8 @@ class Config:
 
     # Optional with defaults
     browser_use_base_url: str = "https://api.browser-use.com"
-    minimax_base_url: str = "https://api.minimax.io"
-    minimax_model: str = "M2-her"
+    minimax_base_url: str = "https://api.minimaxi.chat/v1"
+    minimax_model: str = "minimax-text-01"
     allowed_domains: Optional[list[str]] = None
     site_description: str = ""
     system_prompt_extension: str = ""  # Extra instructions for the browser agent
@@ -61,7 +66,9 @@ class Config:
         bu_key = os.environ.get("BROWSER_USE_API_KEY", "")
         mm_key = os.environ.get("MINIMAX_API_KEY", "")
         mm_group = os.environ.get("MINIMAX_GROUP_ID", "")
-        url = target_url or os.environ.get("TARGET_URL", "").strip() or "https://e-commerce-website-build-six.vercel.app/"
+        mm_base_url = os.environ.get("MINIMAX_BASE_URL", "https://api.minimaxi.chat/v1")
+        mm_model = os.environ.get("MINIMAX_MODEL", "minimax-text-01")
+        url = target_url or os.environ.get("TARGET_URL", "").strip() or "https://shanker.shopping/"
         url = url.rstrip("/")
         domains = allowed_domains
         if domains is None and url:
@@ -77,6 +84,8 @@ class Config:
             browser_use_api_key=bu_key,
             minimax_api_key=mm_key,
             minimax_group_id=mm_group,
+            minimax_base_url=mm_base_url,
+            minimax_model=mm_model,
             target_url=url,
             allowed_domains=domains,
             site_description=desc,

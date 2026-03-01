@@ -107,31 +107,28 @@ def _parse_workflows_from_response(text: str, round_index: int) -> list[Workflow
     return workflows
 
 
+from openai import OpenAI
+
 async def generate_workflows(
     config: Config,
     count: int,
     round_index: int = 0,
-    site_description: str = "E-commerce store with categories: Tops, Bottoms, Outerwear, Accessories.",
+    site_description: str = "E-commerce store.",
     feedback_from_discriminator: str | None = None,
 ) -> list[Workflow]:
     """
-    Call Minimax to generate `count` diverse workflows for the target site.
-    Optionally pass `feedback_from_discriminator` (e.g. previous errors) to steer next round.
+    Call Minimax (via OpenAI-compatible API) to generate `count` diverse workflows.
     """
-    url = f"{config.minimax_base_url}/v1/text/chatcompletion_v2"
-    params: dict[str, str] = {"GroupId": config.minimax_group_id}
-    headers = {
-        "Authorization": f"Bearer {config.minimax_api_key}",
-        "Content-Type": "application/json",
-    }
+    client = OpenAI(
+        api_key=config.minimax_api_key,
+        base_url="https://api.minimaxi.chat/v1",
+    )
+    
     feedback_section = ""
     if feedback_from_discriminator:
-        feedback_section = (
-            "Previous run found these issues (try to cover edge cases and similar flows):\n"
-            + feedback_from_discriminator
-        )
+        feedback_section = f"Previous findings:\n{feedback_from_discriminator}"
     else:
-        feedback_section = "No prior feedback. Generate a diverse first batch."
+        feedback_section = "Initial scan: generate diverse first batch."
 
     system = SYSTEM_PROMPT.format(count=count)
     user = USER_PROMPT_TEMPLATE.format(
@@ -140,28 +137,21 @@ async def generate_workflows(
         feedback_section=feedback_section,
         count=count,
     )
-    payload: dict[str, Any] = {
-        "model": config.minimax_model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "temperature": 0.85,
-        "max_tokens": 2048,
-    }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(url, params=params, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+    try:
+        response = client.chat.completions.create(
+            model="minimax-text-01",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.85,
+        )
+        content = response.choices[0].message.content
+    except Exception as e:
+        print(f"❌ Logic Agent Generator Error: {e}")
+        return []
 
-    # Minimax response shape: choices[0].message.content
-    content = ""
-    for choice in data.get("choices", []):
-        msg = choice.get("message", {})
-        if isinstance(msg.get("content"), str):
-            content = msg["content"]
-            break
     if not content:
         return []
 

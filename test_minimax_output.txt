@@ -1,0 +1,16 @@
+Key preview: sk-api-Zaa...Pzxm4
+
+--- Testing base_url: https://api.minimaxi.chat/v1 with multiple models ---
+Testing model: abab6.5s-chat
+❌ Model abab6.5s-chat failed: Error code: 400 - {'type': 'error', 'error': {'type': 'bad_request_error', 'message': "invalid params, unknown model 'abab6.5s-chat' (2013)", 'http_code': '400'}, 'request_id': '05f36d64d3f662e2d47f1dddeb12cb56'}
+Testing model: abab6.5-chat
+❌ Model abab6.5-chat failed: Error code: 400 - {'type': 'error', 'error': {'type': 'bad_request_error', 'message': "invalid params, unknown model 'abab6.5-chat' (2013)", 'http_code': '400'}, 'request_id': '05f36d640fd4b31e46404d3154dd61fb'}
+Testing model: abab6-chat
+❌ Model abab6-chat failed: Error code: 400 - {'type': 'error', 'error': {'type': 'bad_request_error', 'message': "invalid params, unknown model 'abab6-chat' (2013)", 'http_code': '400'}, 'request_id': '05f36d656bb9b80060bf4390c664a778'}
+Testing model: abab5.5s-chat
+❌ Model abab5.5s-chat failed: Error code: 400 - {'type': 'error', 'error': {'type': 'bad_request_error', 'message': "invalid params, unknown model 'abab5.5s-chat' (2013)", 'http_code': '400'}, 'request_id': '05f36d6583f28adcacfb6d85e3591117'}
+Testing model: abab5.5-chat
+❌ Model abab5.5-chat failed: Error code: 400 - {'type': 'error', 'error': {'type': 'bad_request_error', 'message': "invalid params, unknown model 'abab5.5-chat' (2013)", 'http_code': '400'}, 'request_id': '05f36d658110bc8897fd8bdeefddbb99'}
+Testing model: minimax-text-01
+✅ Success with model minimax-text-01!
+Response: Hello! How are you doing today? I'm here

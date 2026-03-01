@@ -116,9 +116,12 @@ export default function DashboardPage() {
             return f;
           }));
         }
+      } else {
+        alert(data.message || "The agent could not generate a fix for this specific issue.");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("PR creation failed", e);
+      alert(`Fixer Error: ${e.message}`);
     } finally {
       setInProgressKeys((prev) => prev.filter((k) => k !== cardKey));
     }

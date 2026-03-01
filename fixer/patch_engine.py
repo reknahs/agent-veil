@@ -6,26 +6,30 @@ import os
 import re
 from typing import Optional
 
-# Optional: use google-genai for Gemini 2.0 Flash
+# Optional: use openai for MiniMax
 try:
-    from google import genai
-    from google.genai import types
-    _GENAI_AVAILABLE = True
+    from openai import OpenAI
+    _OPENAI_AVAILABLE = True
 except ImportError:
-    _GENAI_AVAILABLE = False
+    _OPENAI_AVAILABLE = False
 
 
-MODEL_ID = "gemini-2.0-flash-001"
+MODEL_ID = "minimax-text-01" 
 MAX_FIX_LINES = 10
 
 
 def _get_client():
-    if not _GENAI_AVAILABLE:
-        raise RuntimeError("google-genai is not installed. pip install google-genai")
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not _OPENAI_AVAILABLE:
+        raise RuntimeError("openai is not installed. pip install openai")
+    api_key = os.environ.get("MINIMAX_API_KEY")
     if not api_key:
-        raise RuntimeError("Set GEMINI_API_KEY or GOOGLE_API_KEY for patch generation.")
-    return genai.Client(api_key=api_key)
+        raise RuntimeError("Set MINIMAX_API_KEY for patch generation.")
+    base_url = "https://api.minimaxi.chat/v1"
+    print(f"    [DEBUG] MiniMax Client: base_url={base_url}, api_key={api_key[:10]}...")
+    return OpenAI(
+        api_key=api_key,
+        base_url=base_url
+    )
 
 
 def _extract_code_block(text: str) -> Optional[str]:
@@ -48,7 +52,7 @@ def generate_fix(
     max_lines: int = MAX_FIX_LINES,
 ) -> Optional[str]:
     """
-    Ask Gemini 2.0 Flash for a minimal fix given the error log and code snippet.
+    Ask MiniMax for a minimal fix given the error log and code snippet.
     Returns the patched code snippet (or None if generation failed).
     """
     client = _get_client()
@@ -74,21 +78,20 @@ Rules:
 """
 
     try:
-        response = client.models.generate_content(
+        response = client.chat.completions.create(
             model=MODEL_ID,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                max_output_tokens=4096,
-            ),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
         )
     except Exception as e:
-        raise RuntimeError(f"Gemini API error: {e}") from e
+        raise RuntimeError(f"MiniMax API error: {e}") from e
 
-    if not response.candidates or not response.candidates[0].content.parts:
+    if not response.choices or not response.choices[0].message.content:
         return None
 
-    text = response.candidates[0].content.parts[0].text
+    text = response.choices[0].message.content
+    print(f"    [MiniMax] Raw text length: {len(text) if text else 0}")
+    # print(f"    [MiniMax] Content: {text[:200]}...")
     fixed = _extract_code_block(text)
     return fixed if fixed else text.strip()
 

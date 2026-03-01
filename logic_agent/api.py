@@ -18,6 +18,8 @@ sys.path.insert(0, str(_agent_dir))
 # Load .env from the agent directory so it works regardless of cwd
 try:
     from dotenv import load_dotenv
+    # Re-verify root path for .env
+    load_dotenv(_root_dir / ".env")
     load_dotenv(_agent_dir / ".env")
 except ImportError:
     pass
