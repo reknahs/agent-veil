@@ -4,7 +4,7 @@
 
 1. **Agent API** (analyzes website + repo, returns findings):
    ```bash
-   cd agent
+   cd ../logic_agent
    python3 -m venv .venv
    source .venv/bin/activate   # or .venv\Scripts\activate on Windows
    pip install -r requirements.txt
