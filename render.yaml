@@ -1,0 +1,48 @@
+services:
+  # 1. The Logic Agent Service
+  - type: web
+    name: agentveil-logic-agent
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python logic_agent/api.py
+    envVars:
+      - key: BROWSER_USE_API_KEY
+        sync: false
+      - key: MINIMAX_API_KEY
+        sync: false
+      - key: MINIMAX_GROUP_ID
+        sync: false
+      - key: PORT
+        value: "8000"
+
+  # 2. The UI Agent Service
+  - type: web
+    name: agentveil-ui-agent
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python -m ui_agent.api
+    envVars:
+      - key: BROWSER_USE_API_KEY
+        sync: false
+      - key: MINIMAX_API_KEY
+        sync: false
+      - key: MINIMAX_GROUP_ID
+        sync: false
+      - key: PORT
+        value: "8002"
+
+  # 3. The Fixer Agent Service
+  - type: web
+    name: agentveil-fixer
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python -m fixer.api
+    envVars:
+      - key: MINIMAX_API_KEY
+        sync: false
+      - key: MINIMAX_GROUP_ID
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: PORT
+        value: "8001"
