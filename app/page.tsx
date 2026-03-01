@@ -33,11 +33,11 @@ export default function HomePage() {
           {/* HooBank-style discount / promo pill */}
           <div className="landing-pill">
             <span className="landing-pill-icon" aria-hidden>✓</span>
-            <span>Fix security in minutes — no code required</span>
+            <span>Fix websites in minutes — no code required</span>
           </div>
           <h1 className="landing-headline">
             The next generation{" "}
-            <span className="landing-highlight landing-highlight-teal">security</span>
+            <span className="landing-highlight landing-highlight-teal">quality assurance</span>
             {" "}for your site
           </h1>
           <p className="landing-subtext">
