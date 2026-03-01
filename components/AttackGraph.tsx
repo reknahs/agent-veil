@@ -31,7 +31,7 @@ export function AttackGraph() {
   const nodeCanvasObject = useMemo(
     () =>
       (
-        node: { id: string; x?: number; y?: number; breached?: boolean },
+        node: any,
         ctx: CanvasRenderingContext2D,
         globalScale: number
       ) => {
@@ -76,7 +76,7 @@ export function AttackGraph() {
       nodeCanvasObject={nodeCanvasObject}
       linkColor={() => "#3f3f46"}
       backgroundColor="#0f0f12"
-      nodePointerAreaPaint={() => {}}
+      nodePointerAreaPaint={() => { }}
     />
   );
 }
