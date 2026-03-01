@@ -1,11 +1,18 @@
 import React from "react";
 import type { Metadata } from "next";
-import { ConvexClientProvider } from "./ConvexClientProvider";
+import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 
+const inter = Inter({ subsets: ["latin"] });
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-poppins",
+});
+
 export const metadata: Metadata = {
-  title: "Security Cartographer",
-  description: "Live attack graph & breach feed",
+  title: "AgentVeil",
+  description: "Automate feature delivery with your community",
 };
 
 export default function RootLayout({
@@ -14,9 +21,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>
-        <ConvexClientProvider>{children}</ConvexClientProvider>
+    <html lang="en" className={poppins.variable}>
+      <body className={inter.className}>
+        {children}
       </body>
     </html>
   );

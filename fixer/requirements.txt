@@ -1,0 +1,6 @@
+# Architect (Fixer) stack: Gemini 2.0 Flash, GitHub API, Daytona
+google-genai>=1.0.0
+PyGithub>=2.4.0
+daytona>=0.140.0
+# Testing
+pytest>=7.0.0

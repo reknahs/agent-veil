@@ -1,50 +1,66 @@
-"use client";
-
 import React from "react";
-import { useAction } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { AttackGraph } from "@/components/AttackGraph";
-import { BreachFeed } from "@/components/BreachFeed";
+import Link from "next/link";
+import { SecurityHeroGraphic } from "@/components/SecurityHeroGraphic";
 
-export default function DashboardPage() {
-  const launchAttack = useAction(api.actions.launchAttack);
-  const rebuildSecurity = useAction(api.actions.rebuildSecurity);
-
+export default function HomePage() {
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Security Cartographer</h1>
-        <p className="dashboard-tagline">Live attack graph & breach feed</p>
-        <div className="dashboard-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => launchAttack({ demo: true })}
-          >
-            Launch Attack
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => rebuildSecurity({})}
-          >
-            Rebuild Security
-          </button>
+    <div className="landing landing-hoobank">
+      <div className="landing-bg">
+        <div className="landing-bg-gradient" />
+        <div className="landing-bg-grid" aria-hidden />
+        {/* HooBank-style blur gradients for depth */}
+        <div className="landing-bg-blur landing-bg-blur-teal" />
+        <div className="landing-bg-blur landing-bg-blur-green" />
+      </div>
+
+      <nav className="landing-nav">
+        <div className="landing-logo">
+          <span className="landing-logo-icon" aria-hidden />
+          <span className="landing-logo-text">AgentVeil</span>
         </div>
-      </header>
+        <div className="landing-nav-links">
+          <Link href="/dashboard" className="landing-nav-link">
+            Dashboard
+          </Link>
+          <Link href="#" className="landing-nav-link landing-nav-cta">
+            Sign In
+          </Link>
+        </div>
+      </nav>
 
-      <main className="dashboard-main">
-        <section className="dashboard-graph">
-          <h2>Attack graph</h2>
-          <div className="graph-container">
-            <AttackGraph />
+      <main className="landing-hero landing-hero-split">
+        <div className="landing-hero-left">
+          {/* HooBank-style discount / promo pill */}
+          <div className="landing-pill">
+            <span className="landing-pill-icon" aria-hidden>✓</span>
+            <span>Fix security in minutes — no code required</span>
           </div>
-        </section>
-
-        <aside className="dashboard-feed">
-          <BreachFeed />
-        </aside>
+          <h1 className="landing-headline">
+            The next generation{" "}
+            <span className="landing-highlight landing-highlight-teal">security</span>
+            {" "}for your site
+          </h1>
+          <p className="landing-subtext">
+            Capture the loudest signals, open issues, draft plans, and push PRs—without leaving your flow. Fix website misconfigurations in minutes.
+          </p>
+          <div className="landing-actions">
+            <Link href="/dashboard" className="landing-btn landing-btn-cta">
+              <span>Get Started</span>
+              <span className="landing-btn-arrow" aria-hidden>→</span>
+            </Link>
+            <Link href="#" className="landing-btn landing-btn-secondary">
+              Sign In
+            </Link>
+          </div>
+        </div>
+        <div className="landing-hero-right">
+          <SecurityHeroGraphic />
+        </div>
       </main>
+
+      <footer className="landing-footer">
+        <div className="landing-footer-copy">© 2025 AgentVeil</div>
+      </footer>
     </div>
   );
 }

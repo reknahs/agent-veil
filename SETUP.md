@@ -1,0 +1,32 @@
+# Setup Guide
+
+## Run the app
+
+1. **Agent API** (analyzes website + repo, returns findings):
+   ```bash
+   cd agent
+   python3 -m venv .venv
+   source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+   pip install -r requirements.txt
+   cp .env.example .env        # then add BROWSER_USE_API_KEY, MINIMAX_API_KEY, MINIMAX_GROUP_ID
+   python -m api
+   ```
+   Agent runs at `http://localhost:8002`.
+
+2. **Next.js dashboard** (UI that calls the agent):
+   ```bash
+   npm install
+   npm run dev
+   ```
+   Open `http://localhost:3000/dashboard`. Enter a website URL and optional GitHub repo, then click **Analyze**. Findings appear as cards (optionally streamed).
+
+3. **Optional:** Set `AGENT_API_URL` or `NEXT_PUBLIC_AGENT_API_URL` (e.g. in `.env.local`) if the agent is not at `http://localhost:8002`.
+
+## Fixer (optional)
+
+For “Rebuild Security” / real GitHub PRs (not wired in the current UI):
+
+- Create a [GitHub Personal Access Token](https://github.com/settings/tokens) with `repo` scope
+- Get a [Gemini API key](https://ai.google.dev/)
+- Run: `GITHUB_TOKEN=... GEMINI_API_KEY=... python -m fixer.api`
+- Use fixer at `http://localhost:8001` when you integrate it.
