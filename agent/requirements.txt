@@ -1,0 +1,6 @@
+# Person 1: Infiltrator - Playwright, FastAPI
+playwright>=1.40.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
+httpx>=0.25.0
+pydantic>=2.0.0

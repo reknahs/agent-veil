@@ -1,5 +1,12 @@
-import { query } from "./_generated/server.js";
+import { query, internalQuery } from "./_generated/server.js";
 import { v } from "convex/values";
+
+export const internalListBreaches = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("breaches").collect();
+  },
+});
 
 export const listBreaches = query({
   args: {},

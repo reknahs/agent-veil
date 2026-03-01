@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "agent": "cd agent && pip install -r requirements.txt && playwright install chromium && python main.py",
+    "fixer": "pip install -r fixer/requirements.txt && python -m fixer.api"
   },
   "dependencies": {
     "convex": "^1.21.0",
