@@ -176,6 +176,9 @@ export function AttackGraph({
       onNodeClick={handleNodeClick}
       linkColor={() => "#3f3f46"}
       backgroundColor="#0f0f12"
+      enableNodeDrag={false}
+      cooldownTicks={120}
+      cooldownTime={2000}
     />
   );
 }

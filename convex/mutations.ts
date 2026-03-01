@@ -122,6 +122,60 @@ export const internalAddBreach = internalMutation({
   },
 });
 
+/**
+ * Seed a predetermined set of workflow nodes (mix of ok and has_issue) for testing the graph and Fix PR flow.
+ * Clears existing workflows and scan_runs, then inserts one completed scan run and 8 demo workflows.
+ */
+export const seedDemoWorkflows = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const workflows = await ctx.db.query("workflows").collect();
+    for (const w of workflows) await ctx.db.delete(w._id);
+    const runs = await ctx.db.query("scan_runs").collect();
+    for (const r of runs) await ctx.db.delete(r._id);
+
+    const runId = await ctx.db.insert("scan_runs", {
+      targetUrl: "https://example.com",
+      githubRepo: "owner/repo",
+      status: "completed",
+      startedAt: now,
+      completedAt: now,
+      workflowCount: 8,
+    });
+    const scanId = runId.toString();
+
+    const demoWorkflows: Array<{
+      label: string;
+      status: "ok" | "has_issue";
+      issue_summary?: string;
+      steps: string[];
+    }> = [
+      { label: "Login with valid credentials", status: "ok", steps: ["Open login page", "Enter email and password", "Submit form"] },
+      { label: "Submit form with empty required fields", status: "has_issue", issue_summary: "Form submits without client-side validation; server returns generic error.", steps: ["Open signup page", "Leave required fields empty", "Click submit"] },
+      { label: "Navigate to /admin without auth", status: "ok", steps: ["Open /admin in new tab", "Observe redirect or 403"] },
+      { label: "Change URL param and reload", status: "has_issue", issue_summary: "Page shows stale or broken state when query param is tampered.", steps: ["Load page", "Edit ?id= in address bar", "Reload"] },
+      { label: "Click all nav links", status: "ok", steps: ["Click Home", "Click Dashboard", "Click Sign in"] },
+      { label: "Use DevTools to modify data-attr and submit", status: "has_issue", issue_summary: "Server accepts modified payload; no server-side validation.", steps: ["Open DevTools", "Change data attribute on form", "Submit"] },
+      { label: "Logout and press back button", status: "ok", steps: ["Log in", "Log out", "Press browser back"] },
+      { label: "Enter XSS in text input", status: "ok", steps: ["Focus text field", "Paste script tag", "Submit"] },
+    ];
+
+    for (const w of demoWorkflows) {
+      await ctx.db.insert("workflows", {
+        scanId,
+        label: w.label,
+        status: w.status,
+        issue_summary: w.issue_summary,
+        steps: w.steps,
+        step_count: w.steps.length,
+        runAt: now,
+      });
+    }
+    return { ok: true, scanId };
+  },
+});
+
 export const clearDemoData = mutation({
   args: {},
   handler: async (ctx) => {
@@ -146,7 +200,26 @@ export const clearDemoData = mutation({
     for (const w of workflows) await ctx.db.delete(w._id);
     const scanRuns = await ctx.db.query("scan_runs").collect();
     for (const r of scanRuns) await ctx.db.delete(r._id);
+    const agentErrors = await ctx.db.query("agent_errors").collect();
+    for (const e of agentErrors) await ctx.db.delete(e._id);
     return { ok: true };
+  },
+});
+
+export const internalInsertAgentError = internalMutation({
+  args: {
+    targetUrl: v.optional(v.string()),
+    title: v.string(),
+    issueSummary: v.string(),
+    description: v.optional(v.string()),
+    status: v.optional(v.string()),
+    taskId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("agent_errors", {
+      ...args,
+      createdAt: Date.now(),
+    });
   },
 });
 

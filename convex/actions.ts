@@ -3,7 +3,8 @@ import { action } from "./_generated/server.js";
 import { internal } from "./_generated/api";
 
 const FIXER_API_URL = process.env.FIXER_API_URL ?? "";
-const ORCHESTRATOR_API_URL = process.env.ORCHESTRATOR_API_URL ?? "";
+const AGENT_API_URL = process.env.AGENT_API_URL ?? "";
+const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL ?? "";
 
 /**
  * Launch Attack — inserts sample logs/breaches for the given target URL (demo).
@@ -135,50 +136,99 @@ export const rebuildSecurity = action({
 });
 
 /**
- * Start workflow scan: clear old workflows, then trigger orchestrator (url + repo).
- * Orchestrator creates scan run in Convex and runs LLM + Browser Use in background.
+ * Create Fix PR for a single workflow (red node).
+ * Calls fixer POST /fix-workflow with label + issue_summary; fixer prompts LLM and opens PR to GitHub.
  */
-export const startWorkflowScan = action({
+export const createFixPrForWorkflow = action({
   args: {
-    target_url: v.string(),
-    github_repo: v.string(),
+    workflow_id: v.optional(v.id("workflows")),
+    label: v.string(),
+    issue_summary: v.string(),
+    github_repo: v.optional(v.string()),
   },
-  handler: async (ctx, { target_url, github_repo }) => {
-    await ctx.runMutation(internal.mutations.internalClearWorkflows);
+  handler: async (ctx, { workflow_id, label, issue_summary, github_repo }) => {
+    await ctx.runMutation(internal.mutations.internalSetPrStatus, {
+      status: "pending",
+      message: "Creating fix PR for workflow...",
+    });
 
-    if (!ORCHESTRATOR_API_URL) {
-      await ctx.runMutation(internal.mutations.internalInsertLog, {
-        message: "Workflow scan skipped: set ORCHESTRATOR_API_URL and run scanner (see scanner/api.py)",
-        level: "warn",
-      });
-      return { ok: false, error: "ORCHESTRATOR_API_URL not set" };
+    if (FIXER_API_URL) {
+      try {
+        const repo = github_repo?.trim()?.replace(/^https?:\/\/github\.com\/?/, "").replace(/\/$/, "") || undefined;
+        const res = await fetch(`${FIXER_API_URL}/fix-workflow`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label,
+            issue_summary,
+            repo_full_name: repo ?? undefined,
+            base_branch: "main",
+          }),
+        });
+        const data = (await res.json()) as { ok?: boolean; pr_url?: string; message?: string };
+        const prUrl = data?.pr_url;
+        const msg = data?.message ?? (res.ok ? "Fix PR created" : "Fixer API error");
+        await ctx.runMutation(internal.mutations.internalSetPrStatus, {
+          status: prUrl ? "created" : "failed",
+          pr_url: prUrl,
+          message: msg,
+        });
+        return { ok: !!data?.ok, pr_url: prUrl ?? undefined };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await ctx.runMutation(internal.mutations.internalSetPrStatus, {
+          status: "failed",
+          message: `Fixer error: ${msg}`,
+        });
+        return { ok: false };
+      }
     }
 
+    await ctx.runMutation(internal.mutations.internalSetPrStatus, {
+      status: "failed",
+      message: "FIXER_API_URL not set. Run the fixer and set FIXER_API_URL in Convex.",
+    });
+    return { ok: false };
+  },
+});
+
+/**
+ * Start agent scan: call the Agent service to run the GAN loop on target_url.
+ * Agent will POST identified errors to CONVEX_SITE_URL/api/agent-error; UI reads them via listAgentErrors.
+ */
+export const startAgentScan = action({
+  args: {
+    target_url: v.string(),
+    site_description: v.optional(v.string()),
+  },
+  handler: async (ctx, { target_url, site_description }) => {
+    if (!AGENT_API_URL) {
+      return {
+        ok: false,
+        message: "AGENT_API_URL not set. Run the Agent service and set AGENT_API_URL in Convex.",
+      };
+    }
     try {
-      const res = await fetch(`${ORCHESTRATOR_API_URL}/scan`, {
+      const body: Record<string, unknown> = {
+        target_url: target_url.trim().replace(/\/$/, ""),
+        convex_site_url: CONVEX_SITE_URL || undefined,
+      };
+      if (site_description?.trim()) body.site_description = site_description.trim();
+      const res = await fetch(`${AGENT_API_URL.replace(/\/$/, "")}/run-scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target_url: target_url.trim(),
-          github_repo: github_repo.trim().replace(/^https?:\/\/github\.com\/?/, "").replace(/\/$/, ""),
-        }),
+        body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { ok?: boolean; scanRunId?: string; error?: string };
-      if (data?.ok && data.scanRunId) {
-        await ctx.runMutation(internal.mutations.internalInsertLog, {
-          message: `Workflow scan started (scanRunId: ${data.scanRunId}). Watch the graph for progress.`,
-          level: "info",
-        });
-        return { ok: true, scanRunId: data.scanRunId };
-      }
-      return { ok: false, error: data?.error ?? "Orchestrator did not return scanRunId" };
+      const data = (await res.json()) as { ok?: boolean; errors_count?: number; message?: string };
+      return {
+        ok: !!data?.ok,
+        errors_count: data?.errors_count ?? 0,
+        message: data?.message,
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      await ctx.runMutation(internal.mutations.internalInsertLog, {
-        message: `Workflow scan failed: ${msg}`,
-        level: "error",
-      });
-      return { ok: false, error: msg };
+      return { ok: false, message: `Agent error: ${msg}` };
     }
   },
 });
+

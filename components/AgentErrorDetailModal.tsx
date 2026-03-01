@@ -1,58 +1,53 @@
 "use client";
 
 import React from "react";
+import type { Id } from "@/convex/_generated/dataModel";
 
-export type WorkflowRecord = {
-  _id: string;
-  label: string;
-  status: "pending" | "ok" | "has_issue";
-  issue_summary?: string;
-  steps?: string[];
-  step_count?: number;
+export type AgentErrorRecord = {
+  _id: Id<"agent_errors">;
+  targetUrl?: string;
+  title: string;
+  issueSummary: string;
+  description?: string;
+  status?: string;
+  taskId?: string;
+  createdAt: number;
 };
 
-export function WorkflowDetailModal({
-  workflow,
+export function AgentErrorDetailModal({
+  error: agentError,
   onClose,
   onCreateFixPR,
   loading,
 }: {
-  workflow: WorkflowRecord;
+  error: AgentErrorRecord;
   onClose: () => void;
   onCreateFixPR?: () => void;
   loading?: boolean;
 }) {
-  const hasIssue = workflow.status === "has_issue";
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3 className="modal-title">Workflow</h3>
+          <h3 className="modal-title">Agent finding</h3>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
         <div className="modal-body">
-          <div
-            className={
-              hasIssue ? "modal-badge modal-badge-breach" : "modal-badge"
-            }
-            style={hasIssue ? undefined : { background: "rgba(34, 197, 94, 0.2)", color: "#22c55e" }}
-          >
-            {workflow.status === "pending"
-              ? "Pending"
-              : hasIssue
-                ? "Issue"
-                : "OK"}
-          </div>
+          <div className="modal-badge modal-badge-breach">ISSUE</div>
           <p className="modal-url" style={{ marginBottom: "0.5rem" }}>
-            {workflow.label}
+            {agentError.title}
           </p>
-          {workflow.issue_summary && (
+          <h4 className="modal-section-title">Issue</h4>
+          <p className="modal-explanation">{agentError.issueSummary}</p>
+          {agentError.description && (
             <>
-              <h4 className="modal-section-title">Issue</h4>
-              <p className="modal-explanation">{workflow.issue_summary}</p>
+              <h4 className="modal-section-title">Details</h4>
+              <p className="modal-explanation" style={{ whiteSpace: "pre-wrap", fontSize: "0.875rem" }}>
+                {agentError.description.slice(0, 1500)}
+                {agentError.description.length > 1500 ? "…" : ""}
+              </p>
             </>
           )}
         </div>
@@ -60,7 +55,7 @@ export function WorkflowDetailModal({
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Close
           </button>
-          {hasIssue && onCreateFixPR && (
+          {onCreateFixPR && (
             <button
               type="button"
               className="btn btn-primary"

@@ -1,5 +1,5 @@
 import { httpRouter } from "convex/server";
-import { postBreach, postLog, getBreaches, postWorkflow, postScanStart, postScanUpdate } from "./httpActions.js";
+import { postBreach, postLog, getBreaches, postWorkflow, postScanStart, postScanUpdate, postAgentError } from "./httpActions.js";
 
 const http = httpRouter();
 
@@ -67,6 +67,18 @@ http.route({
   path: "/api/scan/update",
   method: "OPTIONS",
   handler: postScanUpdate,
+});
+
+http.route({
+  path: "/api/agent-error",
+  method: "POST",
+  handler: postAgentError,
+});
+
+http.route({
+  path: "/api/agent-error",
+  method: "OPTIONS",
+  handler: postAgentError,
 });
 
 export default http;

@@ -61,4 +61,14 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     workflowCount: v.optional(v.number()),
   }).index("by_startedAt", ["startedAt"]),
+
+  agent_errors: defineTable({
+    targetUrl: v.optional(v.string()),
+    title: v.string(),
+    issueSummary: v.string(),
+    description: v.optional(v.string()),
+    status: v.optional(v.string()),
+    taskId: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
 });

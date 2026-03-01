@@ -76,3 +76,14 @@ export const internalListWorkflows = internalQuery({
       .take(100);
   },
 });
+
+export const listAgentErrors = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit = 100 }) => {
+    return await ctx.db
+      .query("agent_errors")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(limit ?? 100);
+  },
+});

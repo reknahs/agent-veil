@@ -159,6 +159,45 @@ export const postScanUpdate = httpAction(async (ctx, request) => {
   }
 });
 
+/** POST body: { targetUrl?, title, issueSummary, description?, status?, taskId? } — ingest one agent-identified error for the UI cards */
+export const postAgentError = httpAction(async (ctx, request) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+  if (request.method !== "POST") {
+    return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+  }
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    const title = body?.title as string | undefined;
+    const issueSummary = body?.issueSummary as string | undefined;
+    if (typeof title !== "string" || typeof issueSummary !== "string") {
+      return new Response(
+        JSON.stringify({ error: "title and issueSummary are required (strings)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    await ctx.runMutation(internal.mutations.internalInsertAgentError, {
+      targetUrl: typeof body?.targetUrl === "string" ? body.targetUrl : undefined,
+      title,
+      issueSummary,
+      description: typeof body?.description === "string" ? body.description : undefined,
+      status: typeof body?.status === "string" ? body.status : undefined,
+      taskId: typeof body?.taskId === "string" ? body.taskId : undefined,
+    });
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
+
 /** POST body: append { scanId, label } or update { workflowId, status, issue_summary?, steps?, step_count? } */
 export const postWorkflow = httpAction(async (ctx, request) => {
   if (request.method === "OPTIONS") {
