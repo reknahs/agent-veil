@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-const UI_AGENT_API_URL = process.env.UI_AGENT_API_URL || "http://localhost:8000";
+const UI_AGENT_API_URL = process.env.UI_AGENT_API_URL || "http://127.0.0.1:8000";
 
 export async function POST(request: NextRequest) {
     const base = UI_AGENT_API_URL.replace(/\/$/, "");

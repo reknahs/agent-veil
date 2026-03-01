@@ -50,7 +50,9 @@ Now that your Daytona workspace is running your Python AI backend 24/7, you can 
 2. The framework preset should auto-detect as **Next.js**.
 3. Under Environment Variables, add:
    - `NEXT_PUBLIC_CONVEX_URL`: Your production Convex URL.
-   - `FIXER_API_URL`: The public Daytona URL you copied for port 8001 (e.g., `https://your-daytona-url-8001.daytona.app/fix-workflow/`).
+   - `FIXER_API_URL`: The public Daytona URL you copied for port 8001 (e.g., `https://8001-your-daytona-url.daytonaproxy01.net/fix-workflow/`).
+   - `AGENT_API_URL`: The Daytona URL pointing to the logic agent on port 8002 (e.g., `https://8002-your-daytona-url.daytonaproxy01.net`).
+   - `UI_AGENT_API_URL`: The Daytona URL pointing to the UI agent on port 8000 (e.g., `https://8000-your-daytona-url.daytonaproxy01.net`).
 4. Click **Deploy**.
 
 **You're done!** Vercel runs your UI for free, Convex runs your DB for free, and Daytona runs your AI backend using your sponsor credits!

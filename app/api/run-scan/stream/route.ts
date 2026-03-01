@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-const AGENT_API_URL = process.env.AGENT_API_URL || process.env.NEXT_PUBLIC_AGENT_API_URL || "http://localhost:8002";
+const AGENT_API_URL = process.env.AGENT_API_URL || process.env.NEXT_PUBLIC_AGENT_API_URL || "http://127.0.0.1:8002";
 
 export async function POST(request: NextRequest) {
   const base = AGENT_API_URL.replace(/\/$/, "");
