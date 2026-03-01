@@ -289,13 +289,17 @@ body {
   letter-spacing: 0.06em;
   margin-bottom: 1rem;
 }
+.finding-card-state-error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.25);
+}
+.finding-card-state-in-progress {
+  color: #fcd34d;
+  background: rgba(251, 191, 36, 0.25);
+}
 .finding-card-state-completed {
   color: #86efac;
   background: rgba(34, 197, 94, 0.2);
-}
-.finding-card-state-in-process {
-  color: #fcd34d;
-  background: rgba(251, 191, 36, 0.2);
 }
 .finding-card-state-unseen {
   color: #a1a1aa;
@@ -422,13 +426,19 @@ body {
   margin-bottom: 1rem;
 }
 .finding-modal-status-issue,
-.finding-modal-status-stopped {
+.finding-modal-status-stopped,
+.finding-modal-status-error {
   color: #fca5a5;
-  background: rgba(239, 68, 68, 0.18);
+  background: rgba(239, 68, 68, 0.25);
 }
-.finding-modal-status-finished {
+.finding-modal-status-in-progress {
+  color: #fcd34d;
+  background: rgba(251, 191, 36, 0.25);
+}
+.finding-modal-status-finished,
+.finding-modal-status-completed {
   color: #86efac;
-  background: rgba(34, 197, 94, 0.18);
+  background: rgba(34, 197, 94, 0.2);
 }
 
 .finding-modal-title {

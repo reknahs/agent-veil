@@ -17,13 +17,22 @@ type ScanResult = {
   errors?: ErrorItem[];
 };
 
-type CardState = "Completed" | "In process" | "Unseen";
+type CardState = "Error" | "In progress" | "Completed";
 
-function getCardState(err: ErrorItem): CardState {
-  const s = (err?.status || "").toLowerCase();
-  if (s === "finished") return "Completed";
-  if (s === "stopped" || s === "error") return "In process";
-  return "Unseen";
+function getCardKey(index: number, err: ErrorItem): string {
+  const title = (err?.title ?? "").slice(0, 50);
+  const summary = (err?.issueSummary ?? "").slice(0, 30);
+  return `finding-${index}-${title}-${summary}`;
+}
+
+function getCardState(
+  err: ErrorItem,
+  cardKey: string,
+  inProgressKeys: Set<string>
+): CardState {
+  if (err?.pullRequestUrl) return "Completed";
+  if (inProgressKeys.has(cardKey)) return "In progress";
+  return "Error";
 }
 
 function normalizeError(raw: unknown): ErrorItem {
@@ -44,11 +53,15 @@ export default function DashboardPage() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [streamingErrors, setStreamingErrors] = useState<ErrorItem[]>([]);
   const [selectedError, setSelectedError] = useState<ErrorItem | null>(null);
+  const [selectedErrorKey, setSelectedErrorKey] = useState<string | null>(null);
+  const [inProgressKeys, setInProgressKeys] = useState<string[]>([]);
+  const inProgressSet = new Set(inProgressKeys);
 
-  const handleCreatePullRequest = (err: ErrorItem) => {
-    // Placeholder: will connect to build module later
+  const handleCreatePullRequest = (err: ErrorItem, cardKey: string) => {
+    setInProgressKeys((prev) => (prev.includes(cardKey) ? prev : [...prev, cardKey]));
     setSelectedError(null);
-    // TODO: call build module with err (e.g. title + issueSummary for PR body)
+    setSelectedErrorKey(null);
+    // TODO: call build module with err; when PR is created, include pullRequestUrl in response so card shows Completed
   };
 
   useEffect(() => {
@@ -66,6 +79,7 @@ export default function DashboardPage() {
     setLoading(true);
     setResult(null);
     setStreamingErrors([]);
+    setInProgressKeys([]);
     const payload = {
       target_url: targetUrl.trim(),
       github_repo: githubRepo.trim() || undefined,
@@ -229,22 +243,26 @@ export default function DashboardPage() {
             {((result?.errors?.length ?? 0) > 0 || streamingErrors.length > 0) && (
               <div className="finding-cards-grid" role="list">
                 {(loading ? streamingErrors : result?.errors ?? []).map((err, i) => {
-                  const state = getCardState(err);
+                  const cardKey = getCardKey(i, err);
+                  const state = getCardState(err, cardKey, inProgressSet);
                   const safeTitle = err?.title ?? "Issue";
                   const safeSummary = err?.issueSummary ?? "";
                   return (
                     <button
-                      key={`finding-${i}-${safeTitle.slice(0, 36)}`}
+                      key={cardKey}
                       type="button"
                       className="finding-card"
-                      onClick={() => setSelectedError(err)}
+                      onClick={() => {
+                        setSelectedError(err);
+                        setSelectedErrorKey(cardKey);
+                      }}
                       role="listitem"
                     >
                       <span className={`finding-card-state finding-card-state-${state.replace(/\s+/g, "-").toLowerCase()}`}>
                         {state}
                       </span>
                       <h3 className="finding-card-title">{safeTitle}</h3>
-                      <p className="finding-card-description">{safeSummary}</p>
+                      <p className="finding-card-description">{safeSummary || "Agent reported failure or bug."}</p>
                     </button>
                   );
                 })}
@@ -281,9 +299,15 @@ export default function DashboardPage() {
               ×
             </button>
             <div className="finding-modal-content">
-              <span className={`finding-modal-status finding-modal-status-${(selectedError.status || "issue").toLowerCase()}`}>
-                {selectedError.status || "Issue"}
-              </span>
+              {(() => {
+                const modalKey = selectedErrorKey ?? `modal-${(selectedError.title ?? "").slice(0, 40)}`;
+                const modalState = getCardState(selectedError, modalKey, inProgressSet);
+                return (
+                  <span className={`finding-modal-status finding-modal-status-${modalState.replace(/\s+/g, "-").toLowerCase()}`}>
+                    {modalState}
+                  </span>
+                );
+              })()}
               <h2 id="finding-modal-title" className="finding-modal-title">
                 {selectedError.title}
               </h2>
@@ -324,7 +348,7 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     className="finding-modal-btn finding-modal-btn-primary"
-                    onClick={() => handleCreatePullRequest(selectedError)}
+                    onClick={() => handleCreatePullRequest(selectedError, selectedErrorKey ?? `modal-${(selectedError.title ?? "").slice(0, 40)}`)}
                   >
                     Create pull request
                   </button>
