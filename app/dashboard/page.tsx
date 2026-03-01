@@ -19,6 +19,13 @@ type ScanResult = {
 
 type CardState = "Error" | "In progress" | "Completed";
 
+type UIResultItem = {
+  status: "info" | "bug" | "done" | "error";
+  message?: string;
+  content?: string;
+};
+
+
 function getCardKey(index: number, err: ErrorItem): string {
   const title = (err?.title ?? "").slice(0, 50);
   const summary = (err?.issueSummary ?? "").slice(0, 30);
@@ -46,10 +53,17 @@ function normalizeError(raw: unknown): ErrorItem {
   };
 }
 
+import LogicResults from "@/components/LogicResults";
+import UIResults from "@/components/UIResults";
+
+
 export default function DashboardPage() {
   const [targetUrl, setTargetUrl] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"logic" | "ui">("logic");
+
+  // Logic Agent State
   const [result, setResult] = useState<ScanResult | null>(null);
   const [streamingErrors, setStreamingErrors] = useState<ErrorItem[]>([]);
   const [selectedError, setSelectedError] = useState<ErrorItem | null>(null);
@@ -57,11 +71,57 @@ export default function DashboardPage() {
   const [inProgressKeys, setInProgressKeys] = useState<string[]>([]);
   const inProgressSet = new Set(inProgressKeys);
 
-  const handleCreatePullRequest = (err: ErrorItem, cardKey: string) => {
+  // UI Agent State
+  const [uiLoading, setUiLoading] = useState(false);
+  const [uiFindings, setUiFindings] = useState<UIResultItem[]>([]);
+
+  const handleCreatePullRequest = async (err: ErrorItem, cardKey: string) => {
     setInProgressKeys((prev) => (prev.includes(cardKey) ? prev : [...prev, cardKey]));
+
+    // For Logic findings, we might already have the modal open; for UI findings we definitely do.
+    // We can keep the modal open or close it. User said "doesnt do anything", so let's keep it open or show feedback.
+    // Actually, closing it and showing "In Progress" on the card is the existing pattern.
     setSelectedError(null);
     setSelectedErrorKey(null);
-    // TODO: call build module with err; when PR is created, include pullRequestUrl in response so card shows Completed
+
+    try {
+      const res = await fetch("/api/fix-workflow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: err.title,
+          issue_summary: err.issueSummary,
+          repo_full_name: githubRepo.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.pr_url) {
+        // Update both streaming and final results
+        const updateFn = (prev: ErrorItem[]) =>
+          prev.map((e) => (e.title === err.title ? { ...e, pullRequestUrl: data.pr_url } : e));
+
+        setStreamingErrors(updateFn);
+        if (result?.errors) {
+          setResult({ ...result, errors: updateFn(result.errors) });
+        }
+
+        // Also update UI findings if it was a UI error
+        if (err.status === "ui-error") {
+          setUiFindings(prev => prev.map(f => {
+            if (f.status === "bug" && f.content?.includes(err.title)) {
+              // We can't easily store PR URL in f.content without parsing, 
+              // but the modal logic uses the passed `err` object.
+              // For now, the local state of results is updated which is enough for the tab views.
+            }
+            return f;
+          }));
+        }
+      }
+    } catch (e) {
+      console.error("PR creation failed", e);
+    } finally {
+      setInProgressKeys((prev) => prev.filter((k) => k !== cardKey));
+    }
   };
 
   useEffect(() => {
@@ -77,98 +137,105 @@ export default function DashboardPage() {
   const handleAnalyze = async () => {
     if (!targetUrl.trim()) return;
     setLoading(true);
+    setUiLoading(true);
     setResult(null);
     setStreamingErrors([]);
     setInProgressKeys([]);
+    setUiFindings([]);
+
     const payload = {
       target_url: targetUrl.trim(),
       github_repo: githubRepo.trim() || undefined,
-      site_description: undefined,
     };
-    try {
-      const res = await fetch("/api/run-scan/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const contentType = res.headers.get("content-type") || "";
-      const isJson = contentType.includes("application/json");
 
-      if (!res.ok || isJson) {
-        const data: ScanResult = await res.json().catch(() => ({
-          ok: false,
-          summary: "",
-          message: res.statusText || `HTTP ${res.status}`,
-          errors: [],
-        }));
-        const errs = Array.isArray(data.errors) ? data.errors.map(normalizeError) : [];
-        setResult({
-          ok: data.ok ?? false,
-          summary: data.summary ?? "",
-          message: data.message ?? "Request failed",
-          errors: errs,
+    // Trigger Logic Agent (Streaming)
+    const runLogicAnalysis = async () => {
+      try {
+        const res = await fetch("/api/run-scan/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         });
-        setLoading(false);
-        return;
-      }
-      if (!res.body) {
-        setLoading(false);
-        return;
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() ?? "";
-        for (const chunk of lines) {
-          const match = chunk.match(/^data:\s*(.+)/m);
-          if (!match) continue;
-          try {
-            const item = JSON.parse(match[1].trim());
-            if (item.type === "error" && item.payload) {
-              setStreamingErrors((prev) => [...(prev || []), normalizeError(item.payload)]);
-            } else if (item.type === "done") {
-              const doneErrs = Array.isArray(item.errors) ? item.errors.map(normalizeError) : [];
-              setResult({
-                ok: item.ok ?? false,
-                summary: item.summary ?? "",
-                message: item.message ?? (doneErrs.length ? `Found ${doneErrs.length} issue(s).` : "No issues found."),
-                errors: doneErrs,
-              });
-            } else if (item.type === "error" && item.message) {
-              setResult({
-                ok: false,
-                summary: "",
-                message: item.message,
-                errors: [],
-              });
-            }
-          } catch {
-            // ignore parse errors for partial chunks
+        if (!res.ok || !res.body) {
+          const data = await res.json().catch(() => ({ message: "Failed to start analysis" }));
+          setResult({ ok: false, summary: "", message: data.message, errors: [] });
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n\n");
+          buffer = lines.pop() ?? "";
+          for (const chunk of lines) {
+            const match = chunk.match(/^data:\s*(.+)/m);
+            if (!match) continue;
+            try {
+              const item = JSON.parse(match[1].trim());
+              if (item.type === "error" && item.payload) {
+                setStreamingErrors((prev) => [...prev, normalizeError(item.payload)]);
+              } else if (item.type === "done") {
+                const doneErrs = Array.isArray(item.errors) ? item.errors.map(normalizeError) : [];
+                setResult({
+                  ok: item.ok ?? false,
+                  summary: item.summary ?? "",
+                  message: item.message || `Found ${doneErrs.length} issue(s).`,
+                  errors: doneErrs,
+                });
+              }
+            } catch { }
           }
         }
+      } catch (e: any) {
+        setResult({ ok: false, summary: "", message: e.message, errors: [] });
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      const msg =
-        e instanceof TypeError && e.message === "Failed to fetch"
-          ? "Could not reach the agent API. Start it from the agent folder: python -m api (or uvicorn api:app --port 8002)"
-          : e instanceof Error
-            ? e.message
-            : "Request failed";
-      setResult({
-        ok: false,
-        summary: "",
-        message: msg,
-        errors: [],
-      });
-    } finally {
-      setLoading(false);
-      setStreamingErrors([]);
-    }
+    };
+
+    // Trigger UI Agent (Streaming)
+    const runUIAnalysis = async () => {
+      try {
+        const res = await fetch("/api/ui-analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok || !res.body) {
+          const data = await res.json().catch(() => ({ message: "Failed" }));
+          setUiFindings([{ status: "error", message: data.message }]);
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const item = JSON.parse(line.trim());
+              setUiFindings((prev) => [...prev, item]);
+              if (item.status === "done" || item.status === "error") break;
+            } catch { }
+          }
+        }
+      } catch (e: any) {
+        setUiFindings([{ status: "error", message: e.message }]);
+      } finally {
+        setUiLoading(false);
+      }
+    };
+
+    // Distribute concurrently
+    Promise.all([runLogicAnalysis(), runUIAnalysis()]);
   };
 
   const canAnalyze = targetUrl.trim().length > 0;
@@ -219,62 +286,45 @@ export default function DashboardPage() {
       </header>
 
       <main className="dashboard-main">
-        {(result || loading) && (
-          <section className="findings-section">
-            <header className="findings-header">
-              <h2 className="findings-title">Findings</h2>
-              {loading && streamingErrors.length === 0 && !result && (
-                <span className="findings-badge findings-badge-loading">Analyzing…</span>
-              )}
-              {result?.message && !loading && (
-                <span className="findings-count">{result.message}</span>
-              )}
-              {loading && streamingErrors.length > 0 && (
-                <span className="findings-count">{streamingErrors.length} issue(s) so far…</span>
-              )}
-            </header>
+        {(result || loading || uiLoading || uiFindings.length > 0) && (
+          <>
+            <div className="tabs-header">
+              <button
+                className={`tab-btn ${activeTab === "logic" ? "active" : ""}`}
+                onClick={() => setActiveTab("logic")}
+              >
+                Logic Agent
+              </button>
+              <button
+                className={`tab-btn ${activeTab === "ui" ? "active" : ""}`}
+                onClick={() => setActiveTab("ui")}
+              >
+                UI Agent
+              </button>
+            </div>
 
-            {!result?.errors?.length && !streamingErrors.length && result?.ok && !loading && (
-              <div className="finding-card finding-card-empty">
-                <p>No issues found.</p>
-              </div>
+            {activeTab === "logic" ? (
+              <LogicResults
+                loading={loading}
+                result={result}
+                streamingErrors={streamingErrors}
+                inProgressSet={inProgressSet}
+                onSelectError={(err, key) => {
+                  setSelectedError(err);
+                  setSelectedErrorKey(key);
+                }}
+              />
+            ) : (
+              <UIResults
+                loading={uiLoading}
+                findings={uiFindings}
+                onSelectError={(err, key) => {
+                  setSelectedError(err);
+                  setSelectedErrorKey(key);
+                }}
+              />
             )}
-
-            {((result?.errors?.length ?? 0) > 0 || streamingErrors.length > 0) && (
-              <div className="finding-cards-grid" role="list">
-                {(loading ? streamingErrors : result?.errors ?? []).map((err, i) => {
-                  const cardKey = getCardKey(i, err);
-                  const state = getCardState(err, cardKey, inProgressSet);
-                  const safeTitle = err?.title ?? "Issue";
-                  const safeSummary = err?.issueSummary ?? "";
-                  return (
-                    <button
-                      key={cardKey}
-                      type="button"
-                      className="finding-card"
-                      onClick={() => {
-                        setSelectedError(err);
-                        setSelectedErrorKey(cardKey);
-                      }}
-                      role="listitem"
-                    >
-                      <span className={`finding-card-state finding-card-state-${state.replace(/\s+/g, "-").toLowerCase()}`}>
-                        {state}
-                      </span>
-                      <h3 className="finding-card-title">{safeTitle}</h3>
-                      <p className="finding-card-description">{safeSummary || "Agent reported failure or bug."}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {result && !result.ok && ((result?.errors?.length ?? 0) === 0 && !streamingErrors.length) && (
-              <div className="finding-card finding-card-error" role="alert">
-                <p>{result.message ?? "Something went wrong."}</p>
-              </div>
-            )}
-          </section>
+          </>
         )}
       </main>
 
@@ -301,7 +351,10 @@ export default function DashboardPage() {
             <div className="finding-modal-content">
               {(() => {
                 const modalKey = selectedErrorKey ?? `modal-${(selectedError.title ?? "").slice(0, 40)}`;
-                const modalState = getCardState(selectedError, modalKey, inProgressSet);
+                // For UI errors, we don't track card state (Completed etc) yet
+                const isUI = selectedError.status === "ui-error";
+                const modalState = isUI ? "Error" : getCardState(selectedError, modalKey, inProgressSet);
+
                 return (
                   <span className={`finding-modal-status finding-modal-status-${modalState.replace(/\s+/g, "-").toLowerCase()}`}>
                     {modalState}
@@ -313,14 +366,9 @@ export default function DashboardPage() {
               </h2>
               <div className="finding-modal-section">
                 <h4 className="finding-modal-label">Summary</h4>
-                <p className="finding-modal-summary">{selectedError.issueSummary}</p>
+                <p className="finding-modal-summary">{selectedError.issueSummary || selectedError.description}</p>
               </div>
-              {selectedError.description && (
-                <div className="finding-modal-section">
-                  <h4 className="finding-modal-label">Description</h4>
-                  <pre className="finding-modal-description">{selectedError.description}</pre>
-                </div>
-              )}
+              {/* Removed redundant Description section for all agents as per user request */}
               {selectedError.pullRequestUrl && (
                 <div className="finding-modal-section finding-modal-pr">
                   <h4 className="finding-modal-label">Pull request</h4>

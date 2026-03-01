@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 
 _agent_dir = Path(__file__).resolve().parent
+_root_dir = _agent_dir.parent
+sys.path.insert(0, str(_root_dir))
 sys.path.insert(0, str(_agent_dir))
 
 # Load .env from the agent directory so it works regardless of cwd
@@ -21,10 +23,14 @@ except ImportError:
     pass
 
 try:
-    from fastapi import FastAPI
+    from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import StreamingResponse
     from pydantic import BaseModel
+    import json
+    import asyncio
+    # Import UI agent streaming function
+    from ui_agent.api import stream_analysis
 except ImportError as e:
     raise RuntimeError(
         "Install API deps: pip install fastapi uvicorn pydantic"
@@ -185,7 +191,6 @@ async def run_scan(req: RunScanRequest):
                 "summary": "",
                 "message": config_error,
             }
-        # Single summary string for the UI box (all issue summaries combined)
         summary_parts = [e["issueSummary"] for e in errors]
         summary = "\n\n".join(summary_parts) if summary_parts else "No issues found."
         return {
@@ -201,6 +206,43 @@ async def run_scan(req: RunScanRequest):
             "summary": "",
             "message": str(e),
         }
+
+# New parallel endpoint
+@app.post("/run-parallel")
+async def run_parallel(req: RunScanRequest):
+    """Run both Logic agent and UI agent in parallel and return combined results."""
+    # Run logic scan
+    logic_task = _run_scan_impl(
+        req.target_url,
+        req.site_description,
+        req.github_repo,
+    )
+    # Run UI agent analysis (streaming generator)
+    async def collect_ui_bugs():
+        bugs = []
+        async for item in stream_analysis(req.target_url, max_steps=55):
+            try:
+                data = json.loads(item)
+                if data.get("status") == "bug":
+                    bugs.append(data.get("content"))
+            except Exception:
+                continue
+        return bugs
+    ui_task = collect_ui_bugs()
+    # Execute concurrently
+    (logic_errors, config_error), ui_bugs = await asyncio.gather(logic_task, ui_task)
+    if config_error:
+        return {"ok": False, "errors": [], "summary": "", "message": config_error, "ui_bugs": []}
+    summary_parts = [e["issueSummary"] for e in logic_errors]
+    summary = "\n\n".join(summary_parts) if summary_parts else "No issues found."
+    return {
+        "ok": True,
+        "errors": logic_errors,
+        "summary": summary,
+        "message": f"Found {len(logic_errors)} logic issue(s).",
+        "ui_bugs": ui_bugs,
+    }
+
 
 
 @app.post("/run-scan/stream")

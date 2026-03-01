@@ -64,37 +64,46 @@ def _extract_errors_from_task(
                 "actions": getattr(step, "actions", None),
             }
         )
-        eval_prev = (getattr(step, "evaluation_previous_goal", None) or "").lower()
-        step_signals = (
-            "fail",
-            "error",
-            "could not",
-            "cannot",
-            "unable",
-            "not found",
-            "did not succeed",
-            "invisible",
-            "stack trace",
-            "typeerror",
-            "undefined",
-            "crash",
-            "another user",
-            "someone else",
-            "negative total",
-            "negative amount",
-        )
-        if any(x in eval_prev for x in step_signals):
-            if failed_step is None:
-                failed_step = _step_to_evaluation(step)
-            error_summary_parts.append(
-                f"Step {getattr(step, 'number', '?')}: {eval_prev[:200]}"
+        
+        # Only flag steps as failures if the agent actually reports it failed or is_success is False
+        if is_success is False:
+            eval_prev = (getattr(step, "evaluation_previous_goal", None) or "").lower()
+            step_signals = (
+                "fail",
+                "error",
+                "could not",
+                "cannot",
+                "unable",
+                "not found",
+                "did not succeed",
+                "invisible",
+                "stack trace",
+                "typeerror",
+                "undefined",
+                "crash",
+                "another user",
+                "someone else",
+                "negative total",
+                "negative amount",
             )
+            # Extra check: exclude "successfully made sure", "confirmed no error", etc.
+            success_indicators = ("successfully made sure", "confirmed no", "no issue found", "works as expected")
+            if any(x in eval_prev for x in step_signals) and not any(s in eval_prev for s in success_indicators):
+                if failed_step is None:
+                    failed_step = _step_to_evaluation(step)
+                error_summary_parts.append(
+                    f"Step {getattr(step, 'number', '?')}: {eval_prev[:200]}"
+                )
 
     # Also flag if final output mentions bug-like content (stack trace, crash, etc.)
-    output_lower = (output or "").lower()
-    output_bug_signals = ("stack trace", "typeerror", "undefined", "crash", "invisible", "negative total", "another order", "someone else's")
-    if any(x in output_lower for x in output_bug_signals):
-        error_summary_parts.append(f"Output indicates bug: {output[:300]}")
+    # ONLY if is_success is False or status is weird.
+    if is_success is False or status != "finished":
+        output_lower = (output or "").lower()
+        output_bug_signals = ("stack trace", "typeerror", "undefined", "crash", "invisible", "negative total", "another order", "someone else's")
+        success_indicators = ("successfully made sure", "confirmed no", "no issue found", "works as expected")
+        
+        if any(x in output_lower for x in output_bug_signals) and not any(s in output_lower for s in success_indicators):
+            error_summary_parts.append(f"Output indicates bug: {output[:300]}")
 
     error_summary = " | ".join(error_summary_parts) if error_summary_parts else ""
     if not error_summary and (status != "finished" or is_success is False):

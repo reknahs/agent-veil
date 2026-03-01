@@ -1,0 +1,72 @@
+# UI/UX Bug Finder API Documentation
+
+This API runs a fully autonomous browser agent to test any website for UI/UX flaws and accessibility bugs. It uses a combination of `browser-use` (vision and navigation) and MiniMax (reasoning and generation) to classify the site, dynamically generate a test plan, run the tests, and stream the results back to the client.
+
+## Setup & Running the Server
+
+1. Ensure your `.env` file in the **project root directory** (not `agent/`) is configured correctly:
+   ```env
+   BROWSER_USE_API_KEY=your_key_here
+   MINIMAX_API_KEY=your_key_here
+   MINIMAX_GROUP_ID=your_id_here
+   ```
+
+2. Start the FastAPI server using Uvicorn:
+   ```bash
+   cd /path/to/project
+   uvicorn agent.api:app --host 0.0.0.0 --port 8000
+   ```
+
+---
+
+## Endpoint: `POST /analyze`
+
+**Description:** Kicks off the full testing workflow and returns an NDJSON (Newline Delimited JSON) stream of progress updates, followed by the actual confirmed bugs.
+
+### Request Format
+```json
+{
+  "url": "https://example.com/shop",
+  "max_steps": 55
+}
+```
+- `url` (string, required): The target website HTTP/HTTPS URL.
+- `max_steps` (integer, optional): Max actions the browser agent is allowed to take. Default is 55.
+
+### Response Format (Streaming JSON-Lines)
+The connection stays open for 5–15 minutes while the agent tests the site. The server will periodically yield JSON objects separated by newlines (`\n`). 
+
+There are four potential `"status"` types in the response objects:
+
+1. **Info (`"status": "info"`)**: Progress updates to keep the connection alive and notify the user of current agent activities.
+   ```json
+   {"status": "info", "message": "Step 1: Classifying website..."}
+   {"status": "info", "message": "Step 2: Generating 20 potential bugs..."}
+   {"status": "info", "message": "Step 3: Launching browser-use. Bugs will be streamed here in real-time as they are found..."}
+   {"status": "info", "message": "Agent explicitly passed: [Issue Name...]"}
+   {"status": "info", "message": "Agent found an issue ('...'), but strict LLM filter flagged it as a subjective suggestion and removed it."}
+   ```
+
+2. **Error (`"status": "error"`)**: Emitted if the agent crashes, the URL is invalid, or the API key is missing.
+   ```json
+   {"status": "error", "message": "Error description..."}
+   ```
+
+3. **Bug (`"status": "bug"`)**: The actual UI/UX flaws found. **These are yielded in real-time instantly the moment the browser agent finishes testing an issue and the strict QA LLM confirms it.** They contain pre-formatted strings perfect for Pull Requests or Issue Trackers.
+   ```json
+   {"status": "bug", "content": "Bug #1: [Code-specific] Form inputs missing labels\nDetail: The checkout form inputs lack..."}
+   {"status": "bug", "content": "Bug #2: [Mobile] Touch targets too small\nDetail: The cart increment buttons are..."}
+   ```
+
+4. **Done (`"status": "done"`)**: The final message sent before the connection closes.
+   ```json
+   {"status": "done", "message": "All issues have been streamed."}
+   ```
+
+### Example Curl Request
+```bash
+curl -N -X POST http://127.0.0.1:8000/analyze \
+     -H 'Content-Type: application/json' \
+     -d '{"url": "https://e-commerce-website-build-six.vercel.app"}'
+```
+*(Note: Use the `-N` flag in curl to disable buffering, so you can see the stream in real-time).*
