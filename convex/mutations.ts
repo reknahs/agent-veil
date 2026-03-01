@@ -122,6 +122,30 @@ export const internalAddBreach = internalMutation({
   },
 });
 
+export const clearDemoData = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const breaches = await ctx.db.query("breaches").collect();
+    for (const b of breaches) {
+      await ctx.db.delete(b._id);
+    }
+    const logs = await ctx.db.query("logs").collect();
+    for (const l of logs) {
+      await ctx.db.delete(l._id);
+    }
+    const pr = await ctx.db.query("pr_status").first();
+    if (pr) {
+      await ctx.db.patch(pr._id, {
+        status: "idle",
+        pr_url: undefined,
+        message: undefined,
+        updatedAt: Date.now(),
+      });
+    }
+    return { ok: true };
+  },
+});
+
 export const internalSetPrStatus = internalMutation({
   args: {
     status: v.union(
