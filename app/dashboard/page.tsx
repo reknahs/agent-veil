@@ -28,9 +28,11 @@ function getCardKey(index: number, err: ErrorItem): string {
 function getCardState(
   err: ErrorItem,
   cardKey: string,
-  inProgressKeys: Set<string>
+  inProgressKeys: Set<string>,
+  prUrlByKey: Record<string, string>
 ): CardState {
-  if (err?.pullRequestUrl) return "Completed";
+  const prUrl = err?.pullRequestUrl ?? prUrlByKey[cardKey];
+  if (prUrl) return "Completed";
   if (inProgressKeys.has(cardKey)) return "In progress";
   return "Error";
 }
@@ -55,13 +57,40 @@ export default function DashboardPage() {
   const [selectedError, setSelectedError] = useState<ErrorItem | null>(null);
   const [selectedErrorKey, setSelectedErrorKey] = useState<string | null>(null);
   const [inProgressKeys, setInProgressKeys] = useState<string[]>([]);
+  const [prUrlByKey, setPrUrlByKey] = useState<Record<string, string>>({});
+  const [fixPrLoading, setFixPrLoading] = useState(false);
+  const [fixPrMessage, setFixPrMessage] = useState<string | null>(null);
   const inProgressSet = new Set(inProgressKeys);
 
-  const handleCreatePullRequest = (err: ErrorItem, cardKey: string) => {
+  const handleCreatePullRequest = async (err: ErrorItem, cardKey: string) => {
+    setFixPrMessage(null);
     setInProgressKeys((prev) => (prev.includes(cardKey) ? prev : [...prev, cardKey]));
-    setSelectedError(null);
-    setSelectedErrorKey(null);
-    // TODO: call build module with err; when PR is created, include pullRequestUrl in response so card shows Completed
+    setFixPrLoading(true);
+    try {
+      const res = await fetch("/api/fix-workflow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: err.title,
+          issue_summary: err.issueSummary,
+          github_repo: githubRepo.trim() || undefined,
+        }),
+      });
+      const data = (await res.json()) as { ok?: boolean; pr_url?: string; message?: string };
+      if (data?.ok && data?.pr_url) {
+        setPrUrlByKey((prev) => ({ ...prev, [cardKey]: data.pr_url! }));
+        setInProgressKeys((prev) => prev.filter((k) => k !== cardKey));
+        setFixPrMessage(data.message ?? "PR created");
+      } else {
+        setFixPrMessage(data?.message ?? "Fix PR failed");
+        setInProgressKeys((prev) => prev.filter((k) => k !== cardKey));
+      }
+    } catch (e) {
+      setFixPrMessage(e instanceof Error ? e.message : "Request failed");
+      setInProgressKeys((prev) => prev.filter((k) => k !== cardKey));
+    } finally {
+      setFixPrLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -244,7 +273,7 @@ export default function DashboardPage() {
               <div className="finding-cards-grid" role="list">
                 {(loading ? streamingErrors : result?.errors ?? []).map((err, i) => {
                   const cardKey = getCardKey(i, err);
-                  const state = getCardState(err, cardKey, inProgressSet);
+                  const state = getCardState(err, cardKey, inProgressSet, prUrlByKey);
                   const safeTitle = err?.title ?? "Issue";
                   const safeSummary = err?.issueSummary ?? "";
                   return (
@@ -281,7 +310,7 @@ export default function DashboardPage() {
       {selectedError && (
         <div
           className="finding-modal-backdrop"
-          onClick={() => setSelectedError(null)}
+          onClick={() => { setSelectedError(null); setFixPrMessage(null); }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="finding-modal-title"
@@ -293,7 +322,7 @@ export default function DashboardPage() {
             <button
               type="button"
               className="finding-modal-close"
-              onClick={() => setSelectedError(null)}
+              onClick={() => { setSelectedError(null); setFixPrMessage(null); }}
               aria-label="Close"
             >
               ×
@@ -301,11 +330,19 @@ export default function DashboardPage() {
             <div className="finding-modal-content">
               {(() => {
                 const modalKey = selectedErrorKey ?? `modal-${(selectedError.title ?? "").slice(0, 40)}`;
-                const modalState = getCardState(selectedError, modalKey, inProgressSet);
+                const modalState = getCardState(selectedError, modalKey, inProgressSet, prUrlByKey);
+                const modalPrUrl = selectedError.pullRequestUrl ?? prUrlByKey[modalKey];
                 return (
-                  <span className={`finding-modal-status finding-modal-status-${modalState.replace(/\s+/g, "-").toLowerCase()}`}>
-                    {modalState}
-                  </span>
+                  <>
+                    <span className={`finding-modal-status finding-modal-status-${modalState.replace(/\s+/g, "-").toLowerCase()}`}>
+                      {modalState}
+                    </span>
+                    {fixPrMessage && (
+                      <div className="finding-modal-section">
+                        <p className={modalPrUrl ? "finding-modal-summary" : "finding-modal-error"}>{fixPrMessage}</p>
+                      </div>
+                    )}
+                  </>
                 );
               })()}
               <h2 id="finding-modal-title" className="finding-modal-title">
@@ -321,11 +358,11 @@ export default function DashboardPage() {
                   <pre className="finding-modal-description">{selectedError.description}</pre>
                 </div>
               )}
-              {selectedError.pullRequestUrl && (
+              {(selectedError.pullRequestUrl ?? prUrlByKey[selectedErrorKey ?? ""]) && (
                 <div className="finding-modal-section finding-modal-pr">
                   <h4 className="finding-modal-label">Pull request</h4>
                   <a
-                    href={selectedError.pullRequestUrl}
+                    href={selectedError.pullRequestUrl ?? prUrlByKey[selectedErrorKey ?? ""]}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="finding-modal-pr-link"
@@ -335,9 +372,9 @@ export default function DashboardPage() {
                 </div>
               )}
               <div className="finding-modal-actions">
-                {selectedError.pullRequestUrl ? (
+                {(selectedError.pullRequestUrl ?? prUrlByKey[selectedErrorKey ?? ""]) ? (
                   <a
-                    href={selectedError.pullRequestUrl}
+                    href={selectedError.pullRequestUrl ?? prUrlByKey[selectedErrorKey ?? ""]}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="finding-modal-btn finding-modal-btn-primary"
@@ -349,14 +386,15 @@ export default function DashboardPage() {
                     type="button"
                     className="finding-modal-btn finding-modal-btn-primary"
                     onClick={() => handleCreatePullRequest(selectedError, selectedErrorKey ?? `modal-${(selectedError.title ?? "").slice(0, 40)}`)}
+                    disabled={fixPrLoading}
                   >
-                    Create pull request
+                    {fixPrLoading ? "Creating PR…" : "Fix PR request"}
                   </button>
                 )}
                 <button
                   type="button"
                   className="finding-modal-btn finding-modal-btn-secondary"
-                  onClick={() => setSelectedError(null)}
+                  onClick={() => { setSelectedError(null); setFixPrMessage(null); }}
                 >
                   Close
                 </button>
