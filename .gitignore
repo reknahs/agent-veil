@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Next.js / Convex (UI)
+.env.local
+node_modules/
+.next/
+tsconfig.tsbuildinfo
