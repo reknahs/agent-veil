@@ -1,6 +1,6 @@
 # ycombinator-hackathon
 
-Security Cartographer — analyze a website and GitHub repo; view findings as cards.
+AgentVeil — analyze a website and GitHub repo; view findings as cards.
 
 ## Quick start
 

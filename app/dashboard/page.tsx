@@ -23,6 +23,7 @@ type UIResultItem = {
   status: "info" | "bug" | "done" | "error";
   message?: string;
   content?: string;
+  pullRequestUrl?: string;
 };
 
 
@@ -96,9 +97,17 @@ export default function DashboardPage() {
       });
       const data = await res.json();
       if (data.ok && data.pr_url) {
-        // Update both streaming and final results
+        let foundMatch = false;
+
+        // Update both streaming and final results for Logic findings
         const updateFn = (prev: ErrorItem[]) =>
-          prev.map((e) => (e.title === err.title ? { ...e, pullRequestUrl: data.pr_url } : e));
+          prev.map((e) => {
+            if (e.title === err.title) {
+              foundMatch = true;
+              return { ...e, pullRequestUrl: data.pr_url };
+            }
+            return e;
+          });
 
         setStreamingErrors(updateFn);
         if (result?.errors) {
@@ -108,13 +117,19 @@ export default function DashboardPage() {
         // Also update UI findings if it was a UI error
         if (err.status === "ui-error") {
           setUiFindings(prev => prev.map(f => {
-            if (f.status === "bug" && f.content?.includes(err.title)) {
-              // We can't easily store PR URL in f.content without parsing, 
-              // but the modal logic uses the passed `err` object.
-              // For now, the local state of results is updated which is enough for the tab views.
+            // Match by checking if the finding's content contains the error title
+            // or if the error summary matches the finding's content
+            if (f.status === "bug" && f.content && (f.content.includes(err.title) || err.issueSummary.includes(f.content) || f.content.includes(err.issueSummary))) {
+              foundMatch = true;
+              return { ...f, pullRequestUrl: data.pr_url };
             }
             return f;
           }));
+        }
+
+        // If we didn't find a matching finding to update, show the error
+        if (!foundMatch && err.status !== "ui-error") {
+          alert("PR was created, but unable to update UI state.");
         }
       } else {
         alert(data.message || "The agent could not generate a fix for this specific issue.");
@@ -248,7 +263,7 @@ export default function DashboardPage() {
       <header className="dashboard-header">
         <div className="dashboard-header-top">
           <div className="dashboard-title-block">
-            <h1>Security Cartographer</h1>
+            <h1>AgentVeil</h1>
             <p className="dashboard-tagline">Analyze a website and GitHub repo</p>
           </div>
         </div>
@@ -321,6 +336,7 @@ export default function DashboardPage() {
               <UIResults
                 loading={uiLoading}
                 findings={uiFindings}
+                inProgressSet={inProgressSet}
                 onSelectError={(err, key) => {
                   setSelectedError(err);
                   setSelectedErrorKey(key);
@@ -356,7 +372,9 @@ export default function DashboardPage() {
                 const modalKey = selectedErrorKey ?? `modal-${(selectedError.title ?? "").slice(0, 40)}`;
                 // For UI errors, we don't track card state (Completed etc) yet
                 const isUI = selectedError.status === "ui-error";
-                const modalState = isUI ? "Error" : getCardState(selectedError, modalKey, inProgressSet);
+                const modalState = isUI
+                  ? (selectedError.pullRequestUrl ? "Completed" : (inProgressSet.has(modalKey) ? "In progress" : "Error"))
+                  : getCardState(selectedError, modalKey, inProgressSet);
 
                 return (
                   <span className={`finding-modal-status finding-modal-status-${modalState.replace(/\s+/g, "-").toLowerCase()}`}>

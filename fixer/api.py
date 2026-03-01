@@ -42,6 +42,15 @@ def _normalize_repo(repo: str) -> str:
         repo = repo.split("github.com/")[-1].strip("/")
     return repo
 
+
+def _slugify(text: str) -> str:
+    """Convert text to a safe branch name slug."""
+    import re
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9]+', '-', text)
+    return text.strip('-')[:60]
+
+
 class BreachItem(BaseModel):
     url: str
     type: str
@@ -118,7 +127,7 @@ def _run_pipeline(breaches: list[BreachItem], repo: str, branch: str) -> tuple[s
                 print(f"  🤖 Generating fix with MiniMax (model={MODEL_ID})...")
                 fixed = generate_fix(
                     error_log=error_log,
-                    code_snippet=content[:3000],
+                    code_snippet=content,
                     file_path=file_path,
                 )
                 if fixed:
@@ -126,7 +135,9 @@ def _run_pipeline(breaches: list[BreachItem], repo: str, branch: str) -> tuple[s
                     patched = apply_fix_to_content(content, fixed)
                     if patched != content:
                         print(f"  🚀 Patch applied! Creating PR...")
-                        branch_name = f"fix/{breach.type.lower().replace(' ', '-')}-{route.strip('/').replace('/', '-')}"[:60]
+                        part1 = _slugify(breach.type)
+                        part2 = _slugify(route.strip('/'))
+                        branch_name = f"fix/{part1}-{part2}"[:60]
                         pr_url = create_fix_pr(
                             repo_full_name=repo,
                             base_branch=branch,
@@ -177,7 +188,7 @@ def _run_workflow_fix_pipeline(label: str, issue_summary: str, repo: str, branch
             print(f"  🤖 Generating fix with MiniMax (model={MODEL_ID})...")
             fixed = generate_fix(
                 error_log=error_log,
-                code_snippet=content[:3000],
+                code_snippet=content,
                 file_path=file_path,
             )
             if fixed:
@@ -185,7 +196,7 @@ def _run_workflow_fix_pipeline(label: str, issue_summary: str, repo: str, branch
                 patched = apply_fix_to_content(content, fixed)
                 if patched != content:
                     print(f"  🚀 Patch applied! Creating PR...")
-                    slug = label.lower().replace(" ", "-")[:40]
+                    slug = _slugify(label)
                     branch_name = f"fix/workflow-{slug}"[:60]
                     pr_url = create_fix_pr(
                         repo_full_name=repo,

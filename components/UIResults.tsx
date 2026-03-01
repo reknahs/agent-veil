@@ -4,6 +4,7 @@ type UIResultItem = {
     status: "info" | "bug" | "done" | "error";
     message?: string;
     content?: string;
+    pullRequestUrl?: string;
 };
 
 // We reuse the ErrorItem type from the parent or define a local compatible one
@@ -12,15 +13,17 @@ type ErrorItem = {
     issueSummary: string;
     description: string;
     status: string;
+    pullRequestUrl?: string;
 };
 
 interface UIResultsProps {
     loading: boolean;
     findings: UIResultItem[];
+    inProgressSet: Set<string>;
     onSelectError: (err: ErrorItem, key: string) => void;
 }
 
-export default function UIResults({ loading, findings, onSelectError }: UIResultsProps) {
+export default function UIResults({ loading, findings, inProgressSet, onSelectError }: UIResultsProps) {
     // Extract only bugs for the main display grid, and keep info/status for a progress line
     const rawBugs = findings.filter(f => f.status === "bug");
 
@@ -76,7 +79,10 @@ export default function UIResults({ loading, findings, onSelectError }: UIResult
                             issueSummary: detail || title, // Keep the full detail as requested
                             description: bug.content || "",
                             status: "ui-error",
+                            pullRequestUrl: bug.pullRequestUrl,
                         };
+                        const cardKey = `ui-error-${i}`;
+                        const state = bug.pullRequestUrl ? "Completed" : (inProgressSet.has(cardKey) ? "In progress" : "Error");
 
                         return (
                             <button
@@ -86,8 +92,8 @@ export default function UIResults({ loading, findings, onSelectError }: UIResult
                                 onClick={() => onSelectError(errorObj, `ui-error-${i}`)}
                                 role="listitem"
                             >
-                                <span className="finding-card-state finding-card-state-error">
-                                    ERROR
+                                <span className={`finding-card-state finding-card-state-${state.replace(/\s+/g, "-").toLowerCase()}`}>
+                                    {state.toUpperCase()}
                                 </span>
                                 <h3 className="finding-card-title">{title}</h3>
                                 <p className="finding-card-description line-clamp-3">{detail || title}</p>
