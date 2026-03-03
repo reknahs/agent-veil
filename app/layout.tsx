@@ -13,6 +13,9 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "AgentVeil",
   description: "Automate feature delivery with your community",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

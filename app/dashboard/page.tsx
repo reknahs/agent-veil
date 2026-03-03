@@ -263,7 +263,10 @@ export default function DashboardPage() {
       <header className="dashboard-header">
         <div className="dashboard-header-top">
           <div className="dashboard-title-block">
-            <h1>AgentVeil</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <img src="/logo.png" alt="AgentVeil Logo" style={{ height: '40px', width: 'auto' }} />
+              <h1 style={{ margin: 0 }}>AgentVeil</h1>
+            </div>
             <p className="dashboard-tagline">Analyze a website and GitHub repo</p>
           </div>
         </div>

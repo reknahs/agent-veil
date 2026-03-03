@@ -1,4 +1,4 @@
-# AgentVeil 🕵️‍♂️✨
+# <img src="public/logo.png" alt="AgentVeil Logo" width="50" align="center"> AgentVeil 🕵️‍♂️✨
 
 **Automated AI Security & UX Auditing Pipeline**
 

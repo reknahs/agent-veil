@@ -15,7 +15,7 @@ export default function HomePage() {
 
       <nav className="landing-nav">
         <div className="landing-logo">
-          <span className="landing-logo-icon" aria-hidden />
+          <img src="/logo.png" alt="AgentVeil Logo" className="landing-logo-img" style={{ height: '32px', width: 'auto' }} />
           <span className="landing-logo-text">AgentVeil</span>
         </div>
         <div className="landing-nav-links">
