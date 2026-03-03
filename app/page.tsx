@@ -22,9 +22,6 @@ export default function HomePage() {
           <Link href="/dashboard" className="landing-nav-link">
             Dashboard
           </Link>
-          <Link href="#" className="landing-nav-link landing-nav-cta">
-            Sign In
-          </Link>
         </div>
       </nav>
 
@@ -47,9 +44,6 @@ export default function HomePage() {
             <Link href="/dashboard" className="landing-btn landing-btn-cta">
               <span>Get Started</span>
               <span className="landing-btn-arrow" aria-hidden>→</span>
-            </Link>
-            <Link href="#" className="landing-btn landing-btn-secondary">
-              Sign In
             </Link>
           </div>
         </div>

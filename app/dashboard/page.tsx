@@ -256,7 +256,7 @@ export default function DashboardPage() {
     Promise.all([runLogicAnalysis(), runUIAnalysis()]);
   };
 
-  const canAnalyze = targetUrl.trim().length > 0;
+  const canAnalyze = targetUrl.trim().length > 0 && githubRepo.trim().length > 0;
 
   return (
     <div className="dashboard">
@@ -288,7 +288,7 @@ export default function DashboardPage() {
             type="text"
             value={githubRepo}
             onChange={(e) => setGithubRepo(e.target.value)}
-            placeholder="owner/repo (optional)"
+            placeholder="owner/repo"
             className="target-input"
           />
           <button
@@ -296,7 +296,7 @@ export default function DashboardPage() {
             className="btn btn-primary"
             onClick={handleAnalyze}
             disabled={loading || !canAnalyze}
-            title={!canAnalyze ? "Enter Website URL first" : undefined}
+            title={!canAnalyze ? "Enter both a Website URL and a GitHub Repo first" : undefined}
           >
             {loading ? "Analyzing…" : "Analyze"}
           </button>
