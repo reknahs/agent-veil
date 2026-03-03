@@ -50,7 +50,9 @@ AgentVeil doesn't just find problems; it fixes them.
 
 ---
 
-## 📚 Design Philosophy & Inspiration
+# 💡 Inspiration
+
+## 📚 Design Philosophy
 AgentVeil core methodology—utilizing a generative agent to model adversarial user behaviors alongside a separate discriminator to systematically expose UI/UX vulnerabilities—is directly inspired by recent advances in Generative Adversarial Networks (GANs) adapted for web-element evaluation.
 
 As highlighted in recent research (e.g., *"The Web User is Not Always Right: Measuring Quality-of-Experience in Generative Navigation Variants."* / arxiv.org/abs/2411.18279), simple rule-based testing is no longer sufficient. Modern web applications do not just break under stress; they break contextually under unexpected, complex human-like navigation.
@@ -61,8 +63,7 @@ Some critical realities our platform addresses based on these industry patterns:
 - **Automation stops where Fixing begins**. By adopting generative patching, AgentVeil doesn't just discover errors; it proactively integrates auto-completed solutions within your repo, bridging the automation gap.
 
 
-## 💡 Key Concepts & Techniques
-## 📚 Design Philosophy & Inspiration
+## 📚 Design Details
 AgentVeil's core methodology—combining generative exploration with systematic validation to expose web vulnerabilities—is fundamentally aligned with current academic perspectives. In particular, the philosophy parallels findings in recent research, notably extending contexts from [Arxiv 2411.18279](https://arxiv.org/abs/2411.18279).
 
 As this research identifies through its benchmarking of generative navigational tools against harmfulness checks, simple rule-based testing boundaries are fundamentally insufficient. Today's web platforms rarely collapse under isolated logic endpoints; instead, vulnerabilities hide deep within contextually intricate, multi-step interface operations that emulate "adversarial human behaviors."
@@ -125,14 +126,4 @@ The script will automatically open your default browser to `http://localhost:300
 
 ### References & Foundational Research
 - Yang, R. et al., (2025). *"The Web User is Not Always Right: Measuring Quality-of-Experience in Generative Navigation Variants."* Available at: [arxiv.org/abs/2411.18279](https://arxiv.org/abs/2411.18279). *AgentVeil’s GAN-structured implementation relies on insights documented here scaling edge-path automation logic!* 
-  
----
-
-## 📚 Inspiration & Academic Alignment
-
-AgentVeil's multi-modal framework acts as a bridge responding directly to challenges benchmarked in modern autonomous security studies, natively addressing paradigms outlined in:
-
-- ["The Web User is Not Always Right: Measuring Quality-of-Experience in Generative Navigation Variants"](https://arxiv.org/abs/2411.18279) (Yang, R. et al., 2024).
-
-This research fundamentally reveals that standard web testing heuristics fall short simply because **modern websites break contextually**, under irregular structural usage rather than load stresses alone. Where conventional testing tests isolated backend protocols natively, our tool embodies evaluating *Adversarial Generative Navigations* natively via front-end boundaries—making certain AI isn't simply detecting vulnerabilities—but natively understanding and resolving them layout by layout.
 
