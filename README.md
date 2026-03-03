@@ -61,30 +61,22 @@ AgentVeil doesn't just find problems; it fixes them.
 
 ## 🚀 Running the Project Locally
 
-To run the entire end-to-end pipeline, you need four terminals running simultaneously from the project root.
+AgentVeil is designed to run entirely locally via a single orchestration script. It will automatically handle virtual environments, background processes, and port management.
 
-**1. Start the Next.js Frontend Dashboard** (Requires Node.js >= 20)
+**1. Set up your Environment Variables**
+Copy the example environment file and insert your dedicated API keys.
 ```bash
-npm run dev
+cp .env.example .env
+```
+Ensure `MINIMAX_API_KEY`, `MINIMAX_GROUP_ID`, and `BROWSER_USE_API_KEY` are explicitly populated.
+
+**2. Start the AgentVeil Cluster**
+Launch the interactive Bash script to spin up the React frontend and all 3 Python microservice APIs concurrently.
+```bash
+sh start_local.sh
 ```
 
-**2. Start the Logic Agent API**
-```bash
-source logic_agent/.venv/bin/activate
-python logic_agent/api.py
-```
+**3. Analyze!**
+The script will automatically open your default browser to `http://localhost:3000`. Enter your target Website URL and its associated GitHub Repository, then click **Analyze** to watch the agents get to work!
 
-**3. Start the UI Agent API**
-```bash
-source logic_agent/.venv/bin/activate
-python -m ui_agent.api
-```
-
-**4. Start the Fixer API Service**
-```bash
-source fixer/.venv/bin/activate
-python -m fixer.api
-```
-*(Alternatively, you can run `npm run fixer` which abstracts this for you)*
-
-Open your browser to `http://localhost:3000`, enter your Website URL and GitHub Repo, and click **Analyze** to watch AgentVeil get to work!
+*(To stop the entire cluster instantly, press `Ctrl+C` once in your terminal.)*
