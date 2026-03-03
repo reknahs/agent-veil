@@ -23,12 +23,13 @@ rm -f .next/dev/lock
 cleanup() {
     echo ""
     echo "🛑 Shutting down all AgentVeil services..."
-    # Forcefully kill the background API services we started
-    pkill -f "python -m ui_agent.api"
-    pkill -f "python -m fixer.api"
-    pkill -f "python logic_agent/api.py"
+    # Forcefully kill the background API services we started (SIGKILL for instant death)
+    lsof -ti:8000,8001,8002,3000 | xargs kill -9 2>/dev/null || true
+    pkill -9 -f "ui_agent.api" 2>/dev/null || true
+    pkill -9 -f "fixer.api" 2>/dev/null || true
+    pkill -9 -f "logic_agent/api.py" 2>/dev/null || true
     # Kill any lingering Next.js nodes attached to this script
-    pkill -f "next dev"
+    pkill -9 -f "next dev" 2>/dev/null || true
     exit 0
 }
 
