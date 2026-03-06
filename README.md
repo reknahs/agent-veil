@@ -86,10 +86,43 @@ As this research identifies through its benchmarking of generative navigational 
 
 AgentVeil uses isolated virtual environments locally via a single run orchestrator. Because it merges APIs on 3 ports along with NextJS locally, it requires keys natively available during startup through a standard configuration format.
 
-**1. Create your Environment Configs**
-Since secrets belong locally, create `.env` & `.env.local` natively at the root directory of cloned data. 
+**1. Install Python Agent Dependencies**
+AgentVeil uses three specialized AI agents (`logic_agent`, `ui_agent`, and `fixer`). The local startup script runs them safely in isolated virtual environments. Create the `venv` and install the pip requirements for each:
+
+*Logic Agent:*
 ```bash
-touch .env
+cd logic_agent
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+cd ..
+```
+
+*Fixer Agent:*
+```bash
+cd fixer
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+cd ..
+```
+
+*UI Agent:*
+```bash
+cd ui_agent
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+cd ..
+```
+
+**2. Create your Environment Configs**
+Since secrets belong locally, rename the template `.env.example` to `.env` at the root directory:
+```bash
+cp .env.example .env
 ```
 
 Open `.env` to input your API keys explicitly or you will run into runtime access failure events. Fill in API values related back to UI Agents + MiniMax logic generation:
@@ -104,20 +137,33 @@ MINIMAX_GROUP_ID="your_group_ID"
 GITHUB_TOKEN="your_personal_access_token_with_repo_scope"
 ```
 
-**2. Synchronize Convex Backend Settings**
-Because AgentVeil broadcasts discovered web data concurrently via React components, you also need to generate your `Convex_deployment` instances securely.
+**3. Install Node Dependencies & Sync Convex Backend**
+Because AgentVeil broadcasts discovered web data concurrently via React components, you need to grab the frontend packages and generate your `Convex_deployment` instances securely.
+
+*Note: You must be running **Node 20+** for the Convex compiler (`v` regex flags) and Next.js to work. If you use `nvm` (Node Version Manager):*
+```bash
+nvm install 20
+nvm use 20
+```
+
+Install frontend packages:
+```bash
+npm install
+```
+
+Link to your Convex account:
 ```bash
 npx convex dev
 ```
 *Note: Doing this command will prompt your convex setup natively, and intelligently output a `.env.local` file hosting `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` so Next.js syncs locally to convex! Leave this terminal instance alone (running).*
 
-**3. Start the AgentVeil Cluster**
-In a new terminal, launch the interactive pipeline Bash script! This spins up the React frontend and all 3 Python microservice `.venv` APIs properly on the correct ports natively.
+**4. Start the AgentVeil Cluster**
+In a new terminal, launch the interactive pipeline Bash script! This spins up the React frontend and all 3 Python microservice `venv` APIs properly on the correct ports natively.
 ```bash
 sh start_local.sh
 ```
 
-**4. Analyze!**
+**5. Analyze!**
 The script will automatically open your default browser to `http://localhost:3000`. Enter your target Website URL and its associated GitHub Repository, then click **Analyze** to watch the agents get to work!
 
 *(To instantly detach and gracefully stop the full cluster, press `Ctrl+C` once in your terminal.)*
