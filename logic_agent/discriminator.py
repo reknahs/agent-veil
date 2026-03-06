@@ -14,6 +14,18 @@ from schemas import ErrorReport, StepEvaluation, Workflow
 
 def _step_to_evaluation(step: Any) -> StepEvaluation:
     """Build StepEvaluation from Browser Use task step."""
+    
+    # Handle dict-like objects from the new API
+    if isinstance(step, dict):
+        return StepEvaluation(
+            step_number=step.get("number", 0),
+            url=step.get("url", "") or "",
+            next_goal=step.get("next_goal", "") or "",
+            evaluation_previous_goal=step.get("evaluation_previous_goal", "") or "",
+            actions=list(step.get("actions", []) or []),
+            screenshot_url=step.get("screenshot_url", None),
+        )
+    
     return StepEvaluation(
         step_number=getattr(step, "number", 0),
         url=getattr(step, "url", "") or "",
@@ -55,19 +67,19 @@ def _extract_errors_from_task(
     # Inspect steps for failure signals
     raw_steps = []
     for step in steps or []:
-        raw_steps.append(
-            {
-                "number": getattr(step, "number", None),
-                "url": getattr(step, "url", None),
-                "next_goal": getattr(step, "next_goal", None),
-                "evaluation_previous_goal": getattr(step, "evaluation_previous_goal", None),
-                "actions": getattr(step, "actions", None),
-            }
-        )
+        step_dict = step if isinstance(step, dict) else {
+            "number": getattr(step, "number", None),
+            "url": getattr(step, "url", None),
+            "next_goal": getattr(step, "next_goal", None),
+            "evaluation_previous_goal": getattr(step, "evaluation_previous_goal", None),
+            "actions": getattr(step, "actions", None),
+        }
+        raw_steps.append(step_dict)
         
         # Only flag steps as failures if the agent actually reports it failed or is_success is False
         if is_success is False:
-            eval_prev = (getattr(step, "evaluation_previous_goal", None) or "").lower()
+            eval_prev = (step_dict.get("evaluation_previous_goal") if isinstance(step, dict) else getattr(step, "evaluation_previous_goal", None)) or ""
+            eval_prev = eval_prev.lower()
             step_signals = (
                 "fail",
                 "error",
@@ -91,8 +103,9 @@ def _extract_errors_from_task(
             if any(x in eval_prev for x in step_signals) and not any(s in eval_prev for s in success_indicators):
                 if failed_step is None:
                     failed_step = _step_to_evaluation(step)
+                step_num = step_dict.get("number", "?") if isinstance(step, dict) else getattr(step, 'number', '?')
                 error_summary_parts.append(
-                    f"Step {getattr(step, 'number', '?')}: {eval_prev[:200]}"
+                    f"Step {step_num}: {eval_prev[:200]}"
                 )
 
     # Also flag if final output mentions bug-like content (stack trace, crash, etc.)
@@ -146,14 +159,32 @@ async def run_workflow_and_report(
     )
     system_extension = (getattr(config, "system_prompt_extension", None) or "")[:2000]
 
+    task_kwargs = {
+        "task": task_prompt,
+        "start_url": config.target_url,
+        "max_steps": config.max_steps_per_task,
+        "allowed_domains": config.allowed_domains,
+    }
+    if system_extension:
+        task_kwargs["system_prompt_extension"] = system_extension
+
     try:
-        result = await client.run(
-            task_prompt,
-            start_url=config.target_url,
-            max_steps=config.max_steps_per_task,
-            allowed_domains=config.allowed_domains,
-            system_prompt_extension=system_extension or None,
-        )
+        task = await client.tasks.create_task(**task_kwargs)
+        task_id = task.id
+        
+        # Poll for completion
+        while True:
+            result = await client.tasks.get_task(task_id=task_id)
+            status = getattr(result, "status", None)
+            if hasattr(status, "value"):
+                status = status.value
+            status = str(status or "unknown")
+            
+            if status in ("finished", "failed", "error", "completed"):
+                break
+                
+            await asyncio.sleep(2.0)
+            
     except Exception as e:
         return ErrorReport(
             workflow_prompt=workflow.prompt,
@@ -165,13 +196,13 @@ async def run_workflow_and_report(
             error_summary=f"Exception: {e}",
         )
 
-    task_id = getattr(result, "id", "") or ""
-    status = getattr(result, "status", None)
-    if hasattr(status, "value"):
-        status = status.value
-    status = str(status or "unknown")
     output = getattr(result, "output", None)
-    steps = list(getattr(result, "steps", []) or [])
+    steps = getattr(result, "steps", [])
+    if hasattr(steps, "model_dump"):
+        steps = steps.model_dump()
+    elif not isinstance(steps, list):
+        steps = list(steps or [])
+    
     is_success = getattr(result, "is_success", None)
     judge_verdict = getattr(result, "judge_verdict", None)
 
